@@ -342,7 +342,7 @@
         .menu-bars span { display:block; height:2px; border-radius:2px; background:var(--text-main); width:100%; }
         .menu-bars span:last-child { width:65%; }
         .error-badge { position:absolute; top:6px; right:6px; width:9px; height:9px; border-radius:50%; background:#ff4d4d; border:1px solid var(--bg-main); }
-        .app-title { flex:1; font-size:22px; font-weight:700; letter-spacing:-0.01em; text-align:center; margin:0; }
+        .app-title { flex:1; font-size:26px; font-weight:700; letter-spacing:-0.01em; text-align:center; margin:0; }
         .update-btn { position:relative; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); color:var(--text-main); flex:0 0 auto; }
         .update-dot { position:absolute; top:6px; right:6px; width:9px; height:9px; border-radius:50%; background:var(--accent); border:1px solid var(--bg-main); }
 
@@ -360,7 +360,7 @@
         .results-header { display:none; align-items:center; gap:14px; padding:6px 8px 0; height:40px; }
         .results-header.visible { display:flex; }
         .results-header .back-btn { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); flex:0 0 auto; }
-        .results-header .rt { font-size:19px; font-weight:700; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .results-header .rt { font-size:20px; font-weight:700; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
         /* ================= HOME: griglia "Recenti" ================= */
         .quick-eyebrow { padding:22px 6px 4px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); font-weight:600; }
@@ -379,6 +379,8 @@
 
         /* ================= RISULTATI: righe con divisore (niente più pillole piene) ================= */
         .track-row { position:relative; }
+        .track-row .text-sm { font-size:15px; }
+        .track-row .text-xs { font-size:12.5px; }
         .track-row::after { content:''; position:absolute; left:64px; right:0; bottom:0; height:1px; background:rgba(243,239,230,0.08); }
         .track-row:last-child::after { display:none; }
         .track-playing-badge { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(0,0,0,.35); color:var(--accent); }
@@ -497,8 +499,8 @@
     <div id="miniPlayer" class="fixed bottom-4 left-4 right-4 h-28 rounded-3xl glass-panel shadow-2xl z-40 flex flex-col justify-center p-3 select-none cursor-pointer" style="touch-action: none;">
         
         <div id="miniPlayerContent" class="flex items-center justify-between w-full flex-1 min-w-0 mb-0.5">
-            <div class="flex items-center flex-1 min-w-0 mr-4 h-16 overflow-hidden" id="miniPlayerDetails">
-                <div class="w-16 h-16 rounded-[22%] overflow-hidden shadow-md shrink-0 bg-neutral-800 z-10 flex items-center justify-center">
+            <div class="flex items-center flex-1 min-w-0 mr-4 h-11 overflow-hidden" id="miniPlayerDetails">
+                <div class="w-11 h-11 rounded-[22%] overflow-hidden shadow-md shrink-0 bg-neutral-800 z-10 flex items-center justify-center">
                     <img id="miniPlayerImg" src="" class="w-full h-full object-cover" alt="" draggable="false">
                 </div>
                 
@@ -513,7 +515,7 @@
             </div>
 
             <div class="flex items-center space-x-1 shrink-0" id="miniPlayerControls">
-                <button id="miniPlayPauseBtn" class="w-14 h-14 rounded-full flex items-center justify-center text-lg shadow-md bg-white text-black transition-transform">
+                <button id="miniPlayPauseBtn" class="w-[38px] h-[38px] rounded-full flex items-center justify-center text-[15px] shadow-md bg-white text-black transition-transform">
                     <i class="fa-solid fa-play ml-0.5" id="miniPlayIcon"></i>
                 </button>
             </div>
@@ -539,11 +541,11 @@
         <div class="relative z-20 flex flex-col h-full px-6 pb-8 pt-4 justify-between pointer-events-none">
             <div id="sheetHeaderDrag" class="w-full flex flex-col items-center py-2 shrink-0 cursor-pointer pointer-events-auto">
                 <div class="flex items-center justify-between w-full px-1">
-                    <button id="closeSheetBtn" class="text-neutral-300 hover:text-white p-2 text-lg active:scale-90 transition-transform">
+                    <button id="closeSheetBtn" class="text-neutral-300 hover:text-white p-2 text-[19px] active:scale-90 transition-transform">
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
-                    <span class="text-[10px] font-bold uppercase tracking-widest text-neutral-300">In Riproduzione</span>
-                    <button id="sheetDownloadBtn" class="text-neutral-400 hover:text-[var(--accent)] p-2 text-base opacity-30 cursor-not-allowed" disabled>
+                    <span class="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-300">In Riproduzione</span>
+                    <button id="sheetDownloadBtn" class="text-neutral-400 hover:text-[var(--accent)] p-2 text-[19px] opacity-30 cursor-not-allowed" disabled>
                         <i class="fa-solid fa-arrow-down"></i>
                     </button>
                 </div>
@@ -551,7 +553,7 @@
 
             <!-- Artwork Rotondo -->
             <div class="flex-1 flex items-center justify-center my-auto relative">
-                <div class="relative w-64 h-64 md:w-72 md:h-72 flex items-center justify-center">
+                <div class="relative w-72 h-72 md:w-80 md:h-80 flex items-center justify-center">
                     <div class="absolute inset-0 rounded-[22%] blur-2xl opacity-20 transition-all duration-500 bg-[var(--accent)]"></div>
                     <div class="w-full h-full rounded-[22%] overflow-hidden border-2 border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.7)] z-10 flex items-center justify-center">
                         <img id="sheetArtworkImg" src="" class="w-full h-full object-cover" alt="">
@@ -565,11 +567,11 @@
                     <div id="swipeTitleContainer" class="w-full py-1 cursor-grab active:cursor-grabbing select-none" style="touch-action: none;">
                         <div class="marquee-wrapper mx-auto max-w-xs">
                             <div id="marqueeContent" class="marquee-content font-bold">
-                                <span id="playerTrackTitle" class="text-lg md:text-xl font-extrabold text-[var(--text-main)]">Nessun Brano</span>
+                                <span id="playerTrackTitle" class="text-[26px] font-bold text-[var(--text-main)]">Nessun Brano</span>
                             </div>
                         </div>
                     </div>
-                    <p id="playerTrackChannel" class="text-xs mt-1 font-semibold custom-text-muted"></p>
+                    <p id="playerTrackChannel" class="text-[14px] mt-1 font-semibold custom-text-muted"></p>
                 </div>
 
                 <div class="flex items-center justify-between text-[11px] mb-2 custom-text-muted font-mono px-1">
@@ -587,11 +589,11 @@
                 </div>
 
                 <div class="flex items-center justify-between px-6 mb-8">
-                    <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-xl p-2 active:scale-90"><i class="fa-solid fa-backward-step"></i></button>
-                    <button id="playPauseBtn" class="w-16 h-16 rounded-full flex items-center justify-center text-xl shadow-2xl bg-white text-black">
+                    <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step"></i></button>
+                    <button id="playPauseBtn" class="w-[68px] h-[68px] rounded-full flex items-center justify-center text-[24px] shadow-2xl bg-white text-black">
                         <i class="fa-solid fa-play ml-1" id="playIcon"></i>
                     </button>
-                    <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-xl p-2 active:scale-90"><i class="fa-solid fa-forward-step"></i></button>
+                    <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-forward-step"></i></button>
                 </div>
 
                 <div class="hidden md:flex items-center space-x-3 justify-center custom-text-muted px-4 py-2 bg-white/5 rounded-2xl mb-2">
@@ -1769,7 +1771,7 @@
             
             marqueeContent.classList.remove('animate-marquee');
             const wrapper = swipeTitle.querySelector('.marquee-wrapper');
-            let cleanText = `<span id="playerTrackTitle" class="text-sm md:text-base font-black text-white">${escapeHtml(titleText)}</span>`;
+            let cleanText = `<span id="playerTrackTitle" class="text-[26px] font-bold text-white">${escapeHtml(titleText)}</span>`;
             
             marqueeContent.innerHTML = cleanText;
             if (wrapper && marqueeContent.scrollWidth > wrapper.clientWidth) {
