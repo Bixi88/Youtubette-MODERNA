@@ -1567,7 +1567,15 @@
         function loadRecentItems() {
             try {
                 const raw = JSON.parse(localStorage.getItem(RECENT_STORAGE_KEY));
-                return Array.isArray(raw) ? raw : [];
+                let items = Array.isArray(raw) ? raw : [];
+                // Migrazione: le voci "canzone" salvate prima che venisse memorizzato anche
+                // il brano completo non hanno "track" e non possono più riportare direttamente
+                // alla sheet (ripiegherebbero sulla vecchia ricerca). Le scartiamo qui, così
+                // il pannello Recenti mostra solo voci che funzionano col nuovo comportamento;
+                // le playlist Spotify non sono toccate, non dipendono da questo campo.
+                const cleaned = items.filter(it => it.type !== 'song' || it.track);
+                if (cleaned.length !== items.length) saveRecentItems(cleaned);
+                return cleaned;
             } catch (err) {
                 return [];
             }
