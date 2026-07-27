@@ -14,7 +14,7 @@
     <style>
         /* ============================================================
            TOKEN SYSTEM (unica estetica dell'app, niente più palette multiple)
-           ink        #0D0C10  — base
+           ink        #000000  — base
            ink-2      #18151C  — superfici leggermente elevate (card/glass)
            ink-3      #221E27  — input/superfici ancora più elevate
            paper      #F3EFE6  — testo primario
@@ -23,7 +23,7 @@
            ============================================================ */
         :root {
             color-scheme: dark;
-            --bg-main: #0D0C10;
+            --bg-main: #000000;
             --bg-card: rgba(24, 21, 28, 0.72);
             --bg-input: #221E27;
             --accent: #FFB13C;
@@ -54,8 +54,8 @@
     <link rel="apple-touch-icon" href="192x192.png">
     
     <!-- Meta Theme Color multipli per Firefox ed Android -->
-    <meta name="theme-color" content="#0D0C10" id="metaThemeColor">
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0D0C10">
+    <meta name="theme-color" content="#000000" id="metaThemeColor">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-menu-bar-style" content="black-translucent">
@@ -2060,7 +2060,8 @@
             const toast = document.createElement('div');
             toast.id = 'youtubette-exit-toast';
             toast.style.bottom = 'calc(14px + env(safe-area-inset-bottom, 0px))';
-            toast.className = 'fixed left-3 right-3 font-medium text-sm py-3 px-4 rounded-lg shadow-2xl z-[150] transition-all duration-300 opacity-0 translate-y-2 bg-black/85 text-white text-center';
+            toast.style.fontFamily = "'Inter', sans-serif";
+            toast.className = 'fixed left-3 right-3 font-medium text-sm py-3 px-4 rounded-lg z-[150] transition-all duration-300 opacity-0 translate-y-2 glass-panel text-center text-[var(--text-main)]';
             toast.textContent = message;
 
             document.body.appendChild(toast);
