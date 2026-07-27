@@ -869,25 +869,38 @@
             // BUFFERING (3), UNSTARTED (-1), CUED (5): nessuna modifica all'icona.
         }
 
+        // Restituisce una Promise che si risolve quando imgElement.src è stato impostato
+        // (immagine pronta, presa dalla cache del browser dato che tempImg l'ha già scaricata).
+        // Serve a chi apre la Now Playing Sheet per sapere quando l'artwork è disponibile,
+        // così da poter aspettare ed evitare di mostrare il placeholder grigio.
         function displayArtwork(imgElement, videoId) {
-            if (!imgElement || !videoId) return;
+            if (!imgElement || !videoId) return Promise.resolve();
 
             const maxres = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
             const mq = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
 
-            const tempImg = new Image();
-            tempImg.onload = function () {
-                if (this.naturalWidth === 120) {
+            return new Promise((resolve) => {
+                const tempImg = new Image();
+                tempImg.onload = function () {
+                    if (this.naturalWidth === 120) {
+                        imgElement.src = mq;
+                    } else {
+                        imgElement.src = maxres;
+                    }
+                    resolve();
+                };
+                tempImg.onerror = function () {
                     imgElement.src = mq;
-                } else {
-                    imgElement.src = maxres;
-                }
-            };
-            tempImg.onerror = function () {
-                imgElement.src = mq;
-            };
-            tempImg.src = maxres;
+                    resolve();
+                };
+                tempImg.src = maxres;
+            });
         }
+
+        // Tiene traccia della Promise dell'ultima artwork caricata per la Now Playing Sheet:
+        // usata solo per far aspettare l'apertura della sheet quando serve (vedi
+        // openNowPlayingSheetWhenArtworkReady), senza toccare il comportamento normale.
+        let sheetArtworkReadyPromise = Promise.resolve();
 
         document.addEventListener('DOMContentLoaded', () => {
             setupFilterDropdowns();
@@ -1177,6 +1190,17 @@
             if (!window.history.state || window.history.state.page !== 'sheet') {
                 window.history.pushState({ page: 'sheet' }, 'Sheet');
             }
+        }
+
+        // Come openNowPlayingSheet, ma aspetta che l'artwork del brano appena caricato sia
+        // pronta prima di far comparire la sheet (fino a un massimo di maxWaitMs), così alla
+        // prima canzone riprodotta non si vede più il placeholder grigio lampeggiare prima
+        // che la copertina compaia. Il timeout evita che una rete lenta blocchi l'apertura.
+        function openNowPlayingSheetWhenArtworkReady(maxWaitMs = 700) {
+            const timeout = new Promise((resolve) => setTimeout(resolve, maxWaitMs));
+            Promise.race([sheetArtworkReadyPromise, timeout]).then(() => {
+                openNowPlayingSheet();
+            });
         }
 
         function closeNowPlayingSheet() {
@@ -1874,7 +1898,7 @@
                 nextSearchPageToken = '';
                 toggleDownloadButtons(true);
                 loadTrack(0);
-                openNowPlayingSheet();
+                openNowPlayingSheetWhenArtworkReady();
             } else if (item.query) {
                 // Voci "Recenti" più vecchie, salvate prima che venisse memorizzato anche il
                 // brano: in mancanza del brano completo, ripieghiamo sulla ricerca come prima.
@@ -2532,8 +2556,9 @@
                 const src = track.thumbnail || (track.id ? `https://img.youtube.com/vi/${track.id}/mqdefault.jpg` : '');
                 if (sheetImg) sheetImg.src = src;
                 if (miniImg) miniImg.src = src;
+                sheetArtworkReadyPromise = Promise.resolve();
             } else if (track.id) {
-                displayArtwork(sheetImg, track.id);
+                sheetArtworkReadyPromise = displayArtwork(sheetImg, track.id);
                 displayArtwork(miniImg, track.id);
             }
 
@@ -2573,8 +2598,9 @@
                     const src = track.thumbnail || `https://img.youtube.com/vi/${track.id}/mqdefault.jpg`;
                     if (sheetImg) sheetImg.src = src;
                     if (miniImg) miniImg.src = src;
+                    sheetArtworkReadyPromise = Promise.resolve();
                 } else {
-                    displayArtwork(sheetImg, track.id);
+                    sheetArtworkReadyPromise = displayArtwork(sheetImg, track.id);
                     displayArtwork(miniImg, track.id);
                 }
             }
