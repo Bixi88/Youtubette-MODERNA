@@ -584,8 +584,8 @@
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
                     <span class="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-300">In Riproduzione</span>
-                    <button id="sheetDownloadBtn" class="text-neutral-400 hover:text-[var(--accent)] p-2 text-[19px] opacity-30 cursor-not-allowed" disabled>
-                        <i class="fa-solid fa-arrow-down"></i>
+                    <button id="sheetDownloadBtn" class="custom-text-accent hover:opacity-80 p-2 text-[21px] opacity-30 cursor-not-allowed active:scale-90 transition-transform" disabled>
+                        <i class="fa-solid fa-circle-down"></i>
                     </button>
                 </div>
             </div>
@@ -633,14 +633,12 @@
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between px-2 mb-8">
-                    <button id="shuffleBtn" class="custom-text-muted active:scale-90 transition-transform" style="font-size:18px;"><i class="fa-solid fa-shuffle"></i></button>
+                <div class="flex items-center justify-center gap-8 mb-8">
                     <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step"></i></button>
                     <button id="playPauseBtn" class="w-[68px] h-[68px] rounded-full flex items-center justify-center text-[24px] shadow-2xl custom-bg-accent" style="color:#1a1305;">
                         <i class="fa-solid fa-play ml-1" id="playIcon"></i>
                     </button>
                     <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-forward-step"></i></button>
-                    <button id="favoriteBtn" class="custom-text-muted active:scale-90 transition-transform" style="font-size:18px;"><i class="fa-regular fa-heart" id="favoriteIcon"></i></button>
                 </div>
 
                 <div class="hidden md:flex items-center space-x-3 justify-center custom-text-muted px-4 py-2 bg-white/5 rounded-2xl mb-2">
@@ -1086,18 +1084,6 @@
 
             document.getElementById('prevBtn').addEventListener('click', prevTrack);
             document.getElementById('nextBtn').addEventListener('click', nextTrack);
-
-            document.getElementById('shuffleBtn').addEventListener('click', (e) => {
-                e.currentTarget.classList.toggle('custom-text-accent');
-                e.currentTarget.classList.toggle('custom-text-muted');
-            });
-            document.getElementById('favoriteBtn').addEventListener('click', (e) => {
-                const icon = document.getElementById('favoriteIcon');
-                const isFav = icon.classList.toggle('fa-solid');
-                icon.classList.toggle('fa-regular', !isFav);
-                e.currentTarget.classList.toggle('custom-text-accent', isFav);
-                e.currentTarget.classList.toggle('custom-text-muted', !isFav);
-            });
 
             document.getElementById('sheetDownloadBtn').addEventListener('click', redirectToDownload);
             document.getElementById('volumeSlider')?.addEventListener('input', (e) => player?.setVolume(e.target.value));
@@ -2103,13 +2089,13 @@
             if (enabled) {
                 sheetDbtn.disabled = false;
                 sheetDbtn.removeAttribute('disabled');
-                sheetDbtn.classList.remove('opacity-30', 'cursor-not-allowed', 'text-neutral-400');
-                sheetDbtn.classList.add('opacity-100', 'text-neutral-300', 'cursor-pointer');
+                sheetDbtn.classList.remove('opacity-30', 'cursor-not-allowed');
+                sheetDbtn.classList.add('opacity-100', 'cursor-pointer');
             } else {
                 sheetDbtn.disabled = true;
                 sheetDbtn.setAttribute('disabled', 'true');
-                sheetDbtn.classList.add('opacity-30', 'cursor-not-allowed', 'text-neutral-400');
-                sheetDbtn.classList.remove('opacity-100', 'text-neutral-300');
+                sheetDbtn.classList.add('opacity-30', 'cursor-not-allowed');
+                sheetDbtn.classList.remove('opacity-100', 'cursor-pointer');
             }
         }
 
