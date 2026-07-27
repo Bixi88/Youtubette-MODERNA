@@ -12,15 +12,23 @@
          quell'attesa il browser mostrerebbe il grigio di default invece del nero dell'app
          (il flash grigio segnalato all'apertura/back). Messo qui, viene applicato subito. -->
     <style>
+        /* ============================================================
+           TOKEN SYSTEM (unica estetica dell'app, niente più palette multiple)
+           ink        #0D0C10  — base
+           ink-2      #18151C  — superfici leggermente elevate (card/glass)
+           ink-3      #221E27  — input/superfici ancora più elevate
+           paper      #F3EFE6  — testo primario
+           mute       #8B8794  — testo secondario
+           signal     #FFB13C  — UNICO accento: ambra/marigold
+           ============================================================ */
         :root {
             color-scheme: dark;
-            --bg-main: #0a0a0a;
-            --bg-card: rgba(18, 18, 18, 0.4);
-            --bg-input: rgba(26, 26, 26, 0.6);
-            --accent: #1DB954;
-            --text-main: #ffffff;
-            --text-muted: #a3a3a3;
-            --is-light: 0;
+            --bg-main: #0D0C10;
+            --bg-card: rgba(24, 21, 28, 0.72);
+            --bg-input: #221E27;
+            --accent: #FFB13C;
+            --text-main: #F3EFE6;
+            --text-muted: #8B8794;
         }
 
         html, body {
@@ -30,7 +38,6 @@
             overflow: hidden;
             background-color: var(--bg-main);
             color: var(--text-main);
-            transition: background-color 0.3s ease, color 0.3s ease;
         }
     </style>
 
@@ -39,14 +46,18 @@
     <link rel="apple-touch-icon" href="192x192.png">
     
     <!-- Meta Theme Color multipli per Firefox ed Android -->
-    <meta name="theme-color" content="#0a0a0a" id="metaThemeColor">
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a">
+    <meta name="theme-color" content="#0D0C10" id="metaThemeColor">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0D0C10">
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-menu-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="YouTubette">
-    
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -81,6 +92,9 @@
             background: transparent;
         }
 
+        body { font-family: 'Inter', sans-serif; }
+        .display { font-family: 'Space Grotesk', sans-serif; }
+
         /* --- SLIDER TRA VISTA PLAYLIST E VISTA LISTA CANZONI --- */
         #viewsSlider {
             width: 200%;
@@ -106,32 +120,6 @@
         }
         .track-row-enter {
             animation: trackRowIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-        }
-
-        #backToHomeBtn {
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
-        }
-        #backToHomeBtn.visible {
-            opacity: 1;
-            pointer-events: auto;
-        }
-        #menuButtonsGroup {
-            transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        #menuButtonsGroup.shift-right {
-            transform: translateX(48px);
-        }
-        /* headerLeftGroup deve riservare davvero lo spazio dello spostamento del
-           menuButtonsGroup (che è solo un transform visivo, non incide sul layout flex),
-           altrimenti la search-container che segue parte troppo presto e viene
-           sovrapposta dall'icona spostata. */
-        #headerLeftGroup {
-            transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        #headerLeftGroup.shift-right {
-            width: 88px; /* 40px pulsante impostazioni + 48px di spostamento */
         }
 
         .ambient-bg {
@@ -314,83 +302,13 @@
         .custom-border-accent { border-color: var(--accent); }
         .custom-text-muted { color: var(--text-muted); }
 
-        /* --- CUSTOM SELECT ESTETICI PER IL MENU IMPOSTAZIONI --- */
-        .custom-select-wrapper {
-            position: relative;
-            user-select: none;
-        }
-        .custom-select-trigger {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
-        }
-        .custom-options {
-            position: absolute;
-            top: 105%;
-            left: 0;
-            right: 0;
-            max-height: 200px;
-            overflow-y: auto;
-            z-index: 110;
-            border: 1px solid rgba(255, 255, 255, 0.15) !important;
-            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.8);
-            display: none;
-            background: #121212 !important;
-        }
-        .custom-options.show {
-            display: block;
-        }
-        .custom-option {
-            cursor: pointer;
-            transition: background 0.2s ease;
-            background: #121212 !important;
-        }
-        .custom-option:hover {
-            background: rgba(255, 255, 255, 0.08) !important;
-        }
-        .custom-option.selected {
-            background: rgba(255, 255, 255, 0.15) !important;
-            font-weight: bold;
-        }
-
         /* --- STILI FILTRI CUSTOM DI RICERCA --- */
         .filter-option {
             transition: background-color 0.2s ease, color 0.2s ease;
         }
         .filter-option.selected {
             background: var(--accent) !important;
-            color: #000000 !important;
-        }
-
-        /* --- STILI MODALITÀ AMOLED --- */
-        body.amoled-active {
-            --bg-main: #000000 !important;
-            --bg-card: #000000 !important;
-            --bg-input: #000000 !important;
-        }
-        body.amoled-active .ambient-bg,
-        body.amoled-active .ambient-hideable {
-            display: none !important;
-            background-image: none !important;
-        }
-        body.amoled-active .glass-panel,
-        body.amoled-active .custom-bg-card,
-        body.amoled-active #filterMenu {
-            background: #000000 !important;
-            border: 1px solid #262626 !important;
-            backdrop-filter: none !important;
-            -webkit-backdrop-filter: none !important;
-        }
-        body.amoled-active #filterDateOptions,
-        body.amoled-active #filterDurationOptions,
-        body.amoled-active #playlistFilterDateOptions,
-        body.amoled-active #playlistFilterDurationOptions {
-            background: #000000 !important;
-            border-color: #262626 !important;
-        }
-        body.amoled-active #nowPlayingSheet {
-            background-color: #000000 !important;
+            color: #1a1305 !important;
         }
 
         #miniPlayer, #miniPlayer *, #swipeTitleContainer, #swipeTitleContainer * {
@@ -454,122 +372,159 @@
                 opacity: 1;
             }
         }
-        body.amoled-active #apiModal .settings-sheet {
-            background: #000000 !important;
-            border: 1px solid #262626 !important;
-            backdrop-filter: none !important;
-            -webkit-backdrop-filter: none !important;
-        }
+
+        /* ================= HEADER: home (menu + titolo + pillola ricerca) ================= */
+        .home-header { padding: 4px 6px 0; }
+        .home-header-row { display:flex; align-items:center; justify-content:space-between; gap:10px; height:40px; }
+        .menu-icon-btn { position:relative; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); flex:0 0 auto; }
+        .menu-bars { width:18px; height:13px; display:flex; flex-direction:column; justify-content:space-between; }
+        .menu-bars span { display:block; height:2px; border-radius:2px; background:var(--text-main); width:100%; }
+        .menu-bars span:last-child { width:65%; }
+        .error-badge { position:absolute; top:6px; right:6px; width:9px; height:9px; border-radius:50%; background:#ff4d4d; border:1px solid var(--bg-main); }
+        .app-title { flex:1; font-size:22px; font-weight:700; letter-spacing:-0.01em; text-align:center; margin:0; }
+        .update-btn { position:relative; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); color:var(--text-main); flex:0 0 auto; }
+        .update-dot { position:absolute; top:6px; right:6px; width:9px; height:9px; border-radius:50%; background:var(--accent); border:1px solid var(--bg-main); }
+
+        .search-pill { margin-top:12px; background:var(--text-main); border-radius:999px; display:flex; align-items:center; gap:10px; padding:10px 14px; position:relative; }
+        .search-pill .mag-btn { color:#4a4550; font-size:14px; flex:0 0 auto; background:none; border:none; padding:2px; display:flex; }
+        #searchInput { flex:1; border:none !important; outline:none !important; background:transparent !important; font-family:'Inter',sans-serif; font-size:13.5px !important; font-weight:500; color:#1c1a20 !important; width:auto !important; opacity:1 !important; padding:0 !important; height:auto !important; }
+        #searchInput::placeholder { color:#8b8794; }
+        .search-pill .filter-btn { color:#4a4550; font-size:15px; flex:0 0 auto; display:flex; align-items:center; padding:2px; width:auto !important; opacity:1 !important; background:none !important; }
+        .search-pill .filter-btn.active { color:#B8791F; }
+
+        .filter-drop { margin-top:10px; background:var(--bg-card); border-radius:18px; padding:14px; border:1px solid var(--hair, rgba(243,239,230,0.08)); }
+        .filter-drop.hidden { display:none; }
+
+        /* ================= HEADER: results (freccia indietro + titolo) ================= */
+        .results-header { display:none; align-items:center; gap:14px; padding:6px 8px 0; height:40px; }
+        .results-header.visible { display:flex; }
+        .results-header .back-btn { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); flex:0 0 auto; }
+        .results-header .rt { font-size:19px; font-weight:700; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+        /* ================= HOME: griglia "Recenti" ================= */
+        .quick-eyebrow { padding:22px 6px 4px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); font-weight:600; }
+        .quick-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:22px 14px; padding:14px 4px 20px; }
+        .qcard { display:flex; flex-direction:column; align-items:center; gap:9px; cursor:pointer; }
+        .qcard:active { transform:scale(0.96); }
+        .qcard .circle { width:100%; aspect-ratio:1/1; border-radius:22%; background-size:cover; background-position:center; background-color:var(--bg-input); position:relative; box-shadow:0 10px 22px -8px rgba(0,0,0,.5); }
+        .qcard.latest .circle { box-shadow:0 0 0 3px var(--accent), 0 10px 22px -8px rgba(0,0,0,.5); }
+        .qcard.latest .name { color:var(--accent); }
+        .qcard .circle .badge { position:absolute; bottom:5px; right:5px; width:18px; height:18px; border-radius:50%; background:rgba(13,12,16,.75); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; font-size:8.5px; color:var(--text-main); }
+        .qcard .name { font-size:12.5px; font-weight:600; text-align:center; line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--text-main); }
+
+        .empty-home { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:60px 30px 0; gap:12px; }
+        .empty-home i { font-size:26px; color:var(--text-muted); opacity:.6; }
+        .empty-home p { font-size:13.5px; color:var(--text-muted); margin:0; line-height:1.5; }
+
+        /* ================= RISULTATI: righe con divisore (niente più pillole piene) ================= */
+        .track-row { position:relative; }
+        .track-row::after { content:''; position:absolute; left:64px; right:0; bottom:0; height:1px; background:rgba(243,239,230,0.08); }
+        .track-row:last-child::after { display:none; }
+        .track-playing-badge { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(0,0,0,.35); color:var(--accent); }
     </style>
 </head>
-<body class="font-sans flex flex-col justify-between hidden p-4 box-border h-full custom-bg-main relative">
+<body class="flex flex-col justify-between hidden p-4 box-border h-full custom-bg-main relative">
 
     <div id="globalAmbientBg" class="ambient-bg ambient-hideable"></div>
 
-    <header class="h-16 px-2 flex items-center justify-between shrink-0 z-40 relative">
-        <div class="flex items-center z-50 relative h-10" id="headerLeftGroup">
-            <!-- Pulsante Indietro (fade-in, posizione fissa; il gruppo menu scorre a destra per fargli spazio) -->
-            <button id="backToHomeBtn" class="absolute left-0 top-0 text-white w-10 h-10 rounded-full flex items-center justify-center bg-white/5 active:scale-90" title="Torna alle playlist">
-                <i class="fa-solid fa-arrow-left text-base"></i>
+    <header class="shrink-0 z-40 relative">
+        <!-- HEADER HOME: menu impostazioni + titolo + pillola di ricerca -->
+        <div class="home-header" id="homeHeader">
+            <div class="home-header-row">
+                <button id="apiConfigBtn" class="menu-icon-btn" title="Impostazioni">
+                    <span class="menu-bars"><span></span><span></span></span>
+                    <span id="apiErrorBadge" class="hidden error-badge"></span>
+                </button>
+                <h1 class="app-title display">YouTubette</h1>
+                <button id="appUpdateBtn" class="hidden update-btn" title="Aggiorna App">
+                    <i class="fa-solid fa-arrows-rotate text-sm"></i>
+                    <span class="update-dot"></span>
+                </button>
+            </div>
+
+            <div class="search-pill" id="searchContainer">
+                <button id="searchTriggerBtn" class="mag-btn" title="Cerca">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+                <input type="text" id="searchInput" placeholder="Cosa vuoi ascoltare oggi?"
+                    autocomplete="off" autocorrect="off" spellcheck="false">
+                <button id="filterToggleBtn" class="filter-btn" title="Filtri">
+                    <i class="fa-solid fa-sliders"></i>
+                </button>
+            </div>
+
+            <!-- Pannello Filtri YouTube -->
+            <div id="filterMenu" class="filter-drop hidden">
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- Colonna Data di Caricamento -->
+                    <div class="relative">
+                        <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5 custom-text-muted">Data di Caricamento</label>
+                        <div class="filter-select-wrapper relative" id="filterDateWrapper">
+                            <div id="filterDateTrigger" class="flex items-center justify-between text-xs px-3.5 py-3 rounded-xl bg-white/5 border border-white/5 text-white cursor-pointer select-none">
+                                <span id="filterDateValue">Qualsiasi data</span>
+                                <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
+                            </div>
+                            <div id="filterDateOptions" class="hidden absolute top-[105%] left-0 right-0 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5 selected font-bold" data-value="any">Qualsiasi data</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="hour">Ultima ora</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="today">Oggi</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="week">Questa settimana</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="month">Questo mese</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="year">Quest'anno</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Colonna Durata -->
+                    <div class="relative">
+                        <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5 custom-text-muted">Durata Brano</label>
+                        <div class="filter-select-wrapper relative" id="filterDurationWrapper">
+                            <div id="filterDurationTrigger" class="flex items-center justify-between text-xs px-3.5 py-3 rounded-xl bg-white/5 border border-white/5 text-white cursor-pointer select-none">
+                                <span id="filterDurationValue">Qualsiasi durata</span>
+                                <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
+                            </div>
+                            <div id="filterDurationOptions" class="hidden absolute top-[105%] left-0 right-0 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5 selected font-bold" data-value="any">Qualsiasi durata</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="short">Breve (&lt; 4 min)</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="medium">Media (4 - 20 min)</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="long">Lunga (&gt; 20 min)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- HEADER RISULTATI: freccia indietro + nome ricerca/playlist -->
+        <div class="results-header" id="resultsHeader">
+            <button id="backToHomeBtn" class="back-btn" title="Torna alla home">
+                <i class="fa-solid fa-arrow-left"></i>
             </button>
-
-            <div id="menuButtonsGroup" class="flex items-center gap-2">
-                <!-- Pulsante Impostazioni (Menu con tre linette) -->
-                <button id="apiConfigBtn" class="text-white w-10 h-10 rounded-full flex items-center justify-center bg-white/5 active:scale-90 transition-all relative" title="Impostazioni">
-                    <i class="fa-solid fa-equals text-base"></i>
-                    <span id="apiErrorBadge" class="hidden absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-black animate-pulse"></span>
-                </button>
-                
-                <!-- Pulsante Aggiornamento App (Inizialmente nascosto, si accende alla notifica di update) -->
-                <button id="appUpdateBtn" class="hidden text-white w-10 h-10 rounded-full flex items-center justify-center bg-white/5 active:scale-90 transition-all relative" title="Aggiorna App">
-                    <i class="fa-solid fa-arrows-rotate text-base"></i>
-                    <span class="absolute top-1 right-1 w-2.5 h-2.5 bg-[var(--accent)] rounded-full border border-black animate-ping"></span>
-                    <span class="absolute top-1 right-1 w-2.5 h-2.5 bg-[var(--accent)] rounded-full border border-black"></span>
-                </button>
-            </div>
+            <span class="rt display" id="resultsTitle">Risultati</span>
         </div>
 
-        <div id="headerTitle" class="absolute left-1/2 -translate-x-1/2 pointer-events-none transition-opacity duration-300">
-            <span class="font-black tracking-widest text-white text-xs uppercase">YOUTUBETTE</span>
-        </div>
-        
-        <div class="search-container" id="searchContainer">
-            <input type="text" id="searchInput" placeholder="Cerca canzoni..." 
-                autocomplete="off" autocorrect="off" spellcheck="false"
-                class="text-xs py-2 rounded-full focus:outline-none focus:border-[var(--accent)] text-white">
-            
-            <div class="search-buttons">
-                <!-- Icona filtri YouTube (Sliders) -->
-                <button id="filterToggleBtn" class="text-white h-8 rounded-full flex items-center justify-center hover:bg-white/10" title="Filtri">
-                    <i class="fa-solid fa-sliders text-xs"></i>
-                </button>
-
-                <!-- Bottone invio / attivazione ricerca -->
-                <button id="searchTriggerBtn" class="w-8 h-8 rounded-full flex items-center justify-center bg-white/5 text-white active:scale-90 transition-all" title="Cerca">
-                    <i class="fa-solid fa-magnifying-glass text-xs" id="searchIcon"></i>
-                </button>
-            </div>
-        </div>
-
-        <button id="pwaInstallBtn" class="hidden absolute top-20 right-4 text-black font-bold text-[10px] px-3 py-1 rounded-full active:scale-95 transition-transform custom-bg-accent z-50">
+        <button id="pwaInstallBtn" class="hidden absolute top-2 right-2 text-[#1a1305] font-bold text-[10px] px-3 py-1.5 rounded-full active:scale-95 transition-transform custom-bg-accent z-50">
             <i class="fa-solid fa-download mr-1"></i> Installa
         </button>
     </header>
-
-    <!-- Pannello Filtri YouTube (Distanziato di pochissimi pixel - top-[70px]) -->
-    <div id="filterMenu" class="hidden absolute top-[70px] left-4 right-4 border rounded-2xl p-4 shadow-2xl z-50 custom-bg-card border-white/10 transition-all duration-300">
-        <div class="grid grid-cols-2 gap-4">
-            <!-- Colonna Data di Caricamento -->
-            <div class="relative">
-                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5 custom-text-muted">Data di Caricamento</label>
-                <div class="filter-select-wrapper relative" id="filterDateWrapper">
-                    <div id="filterDateTrigger" class="flex items-center justify-between text-xs px-3.5 py-3 rounded-xl bg-white/5 border border-white/5 text-white cursor-pointer select-none">
-                        <span id="filterDateValue">Qualsiasi data</span>
-                        <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
-                    </div>
-                    <div id="filterDateOptions" class="hidden absolute top-[105%] left-0 right-0 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
-                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5 selected font-bold" data-value="any">Qualsiasi data</div>
-                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="hour">Ultima ora</div>
-                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="today">Oggi</div>
-                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="week">Questa settimana</div>
-                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="month">Questo mese</div>
-                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="year">Quest'anno</div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Colonna Durata -->
-            <div class="relative">
-                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5 custom-text-muted">Durata Brano</label>
-                <div class="filter-select-wrapper relative" id="filterDurationWrapper">
-                    <div id="filterDurationTrigger" class="flex items-center justify-between text-xs px-3.5 py-3 rounded-xl bg-white/5 border border-white/5 text-white cursor-pointer select-none">
-                        <span id="filterDurationValue">Qualsiasi durata</span>
-                        <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
-                    </div>
-                    <div id="filterDurationOptions" class="hidden absolute top-[105%] left-0 right-0 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
-                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5 selected font-bold" data-value="any">Qualsiasi durata</div>
-                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="short">Breve (&lt; 4 min)</div>
-                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="medium">Media (4 - 20 min)</div>
-                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="long">Lunga (&gt; 20 min)</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Sezione Principale -->
     <main class="flex-1 flex flex-col overflow-hidden z-10 relative">
         <section class="flex-1 flex flex-col overflow-hidden h-full relative">
             <div id="viewsSlider" class="flex h-full">
-                <!-- VISTA 1: Playlist (Ricerche Rapide) -->
+                <!-- VISTA 1: Home (Recenti) -->
                 <div id="homeView" class="shrink-0 h-full overflow-y-auto pr-0">
-                    <div id="quickSearchHome" class="hidden grid grid-cols-3 gap-x-4 gap-y-7 px-2 pt-4 pb-36"></div>
-                    <p id="placeholderText" class="text-xs p-8 italic text-center mt-12 custom-text-muted">Usa la lente in alto a destra per cercare brani, oppure incolla il link di una playlist Spotify.</p>
+                    <div class="quick-eyebrow">Recenti</div>
+                    <div id="recentGrid" class="quick-grid hidden"></div>
+                    <div id="emptyHome" class="empty-home">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <p>Usa la barra di ricerca in alto per cercare brani, oppure incolla il link di una playlist Spotify.<br>Le tue ultime ricerche appariranno qui.</p>
+                    </div>
                 </div>
                 <!-- VISTA 2: Lista Canzoni (risultati ricerca / playlist aperta) -->
                 <div id="resultsView" class="shrink-0 h-full overflow-y-auto pr-0">
                     <p id="resultsStatusText" class="hidden text-xs p-8 italic text-center mt-12 custom-text-muted"></p>
-                    <div id="trackList" class="space-y-1 pb-36 px-6"></div>
+                    <div id="trackList" class="pb-36 px-6"></div>
                 </div>
             </div>
         </section>
@@ -582,7 +537,7 @@
         
         <div id="miniPlayerContent" class="flex items-center justify-between w-full flex-1 min-w-0 mb-0.5">
             <div class="flex items-center flex-1 min-w-0 mr-4 h-16 overflow-hidden" id="miniPlayerDetails">
-                <div class="w-16 h-16 rounded-full overflow-hidden shadow-md shrink-0 bg-neutral-800 z-10 flex items-center justify-center">
+                <div class="w-16 h-16 rounded-[22%] overflow-hidden shadow-md shrink-0 bg-neutral-800 z-10 flex items-center justify-center">
                     <img id="miniPlayerImg" src="" class="w-full h-full object-cover" alt="" draggable="false">
                 </div>
                 
@@ -636,8 +591,8 @@
             <!-- Artwork Rotondo -->
             <div class="flex-1 flex items-center justify-center my-auto relative">
                 <div class="relative w-64 h-64 md:w-72 md:h-72 flex items-center justify-center">
-                    <div class="absolute inset-0 rounded-full blur-2xl opacity-20 transition-all duration-500 bg-[var(--accent)]"></div>
-                    <div class="w-full h-full rounded-full overflow-hidden border-2 border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.7)] z-10 flex items-center justify-center">
+                    <div class="absolute inset-0 rounded-[22%] blur-2xl opacity-20 transition-all duration-500 bg-[var(--accent)]"></div>
+                    <div class="w-full h-full rounded-[22%] overflow-hidden border-2 border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.7)] z-10 flex items-center justify-center">
                         <img id="sheetArtworkImg" src="" class="w-full h-full object-cover" alt="">
                     </div>
                 </div>
@@ -694,87 +649,7 @@
                 <i class="fa-solid fa-equals mr-2.5 custom-text-accent"></i> Impostazioni
             </h3>
             
-            <div class="mb-4 relative">
-                <label class="block text-xs font-bold uppercase tracking-wider mb-2 custom-text-muted">Stile Interfaccia</label>
-                <div class="custom-select-wrapper">
-                    <div id="customSelectTrigger" class="custom-select-trigger w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none custom-bg-input text-white">
-                        <span id="customSelectedValue">Seleziona Tema...</span>
-                        <i class="fa-solid fa-chevron-down text-neutral-400"></i>
-                    </div>
-                    <div id="customSelectOptions" class="custom-options w-full rounded-xl custom-bg-input text-white text-xs"></div>
-                </div>
-            </div>
-
-            <!-- INTERRUTTORE MODALITÀ AMOLED -->
-            <div class="mb-4 flex items-center justify-between border-t border-white/5 pt-4">
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider text-white">Modalità AMOLED</label>
-                    <span class="text-[9px] custom-text-muted">Spegni gli sfondi e ottimizza i neri</span>
-                </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="amoledToggle" class="sr-only peer">
-                    <div class="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--accent)]"></div>
-                </label>
-            </div>
-
-            <!-- FILTRO PLAYLIST (si applica solo ai cerchi playlist in home) -->
-            <div class="mb-4 border-t border-white/5 pt-4">
-                <label class="block text-xs font-bold uppercase tracking-wider mb-1 custom-text-muted">Filtro Playlist</label>
-                <span class="text-[9px] custom-text-muted block mb-2">Si applica solo alle playlist in home, non alla ricerca in alto</span>
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="relative">
-                        <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5 custom-text-muted">Data</label>
-                        <div class="filter-select-wrapper relative" id="playlistFilterDateWrapper">
-                            <div id="playlistFilterDateTrigger" class="flex items-center justify-between text-xs px-3.5 py-3 rounded-xl bg-white/5 border border-white/5 text-white cursor-pointer select-none">
-                                <span id="playlistFilterDateValue">Oggi</span>
-                                <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
-                            </div>
-                            <div id="playlistFilterDateOptions" class="hidden absolute top-[105%] left-0 right-0 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
-                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="any">Qualsiasi data</div>
-                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="hour">Ultima ora</div>
-                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5 selected font-bold" data-value="today">Oggi</div>
-                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="week">Questa settimana</div>
-                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="month">Questo mese</div>
-                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="year">Quest'anno</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="relative">
-                        <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5 custom-text-muted">Durata</label>
-                        <div class="filter-select-wrapper relative" id="playlistFilterDurationWrapper">
-                            <div id="playlistFilterDurationTrigger" class="flex items-center justify-between text-xs px-3.5 py-3 rounded-xl bg-white/5 border border-white/5 text-white cursor-pointer select-none">
-                                <span id="playlistFilterDurationValue">Breve (&lt; 4 min)</span>
-                                <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
-                            </div>
-                            <div id="playlistFilterDurationOptions" class="hidden absolute top-[105%] left-0 right-0 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
-                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="any">Qualsiasi durata</div>
-                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5 selected font-bold" data-value="short">Breve (&lt; 4 min)</div>
-                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="medium">Media (4 - 20 min)</div>
-                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="long">Lunga (&gt; 20 min)</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- RICERCHE RAPIDE (Scorciatoie in Home) -->
-            <div class="mb-4 border-t border-white/5 pt-4">
-                <label class="block text-xs font-bold uppercase tracking-wider mb-2 custom-text-muted">Ricerche Rapide</label>
-                <div class="space-y-2">
-                    <input type="text" id="quickSearchQueryInput" placeholder="Cosa cercare (es. lofi hip hop)"
-                        autocomplete="off" autocorrect="off" spellcheck="false"
-                        class="w-full text-xs px-4 py-3 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
-                    <input type="text" id="quickSearchNameInput" placeholder="Nome da mostrare (es. Lofi)"
-                        autocomplete="off" autocorrect="off" spellcheck="false"
-                        class="w-full text-xs px-4 py-3 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
-                    <button id="addQuickSearchBtn" class="w-full font-bold text-xs px-4 py-2.5 rounded-xl active:scale-95 transition-all bg-white/10 text-white hover:bg-white/15">
-                        <i class="fa-solid fa-plus mr-1.5"></i> Aggiungi Scorciatoia
-                    </button>
-                </div>
-                <div id="quickSearchManageList" class="space-y-1.5 mt-3 max-h-40 overflow-y-auto pr-0.5"></div>
-            </div>
-
-            <div class="mb-4 border-t border-white/5 pt-4">
+            <div class="mb-2">
                 <div class="flex items-center justify-between mb-2">
                     <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted">YouTube API Key</label>
                     <span id="modalApiBadgeError" class="hidden text-[10px] font-bold text-red-500 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full animate-pulse">Chiave Non Valida</span>
@@ -785,56 +660,29 @@
 
             <div class="flex items-center justify-end space-x-3 mt-6 border-t border-white/5 pt-4">
                 <button id="modalCancelBtn" class="hover:text-white font-semibold text-xs px-4 py-2 rounded-full transition-colors custom-text-muted">Annulla</button>
-                <button id="modalSaveBtn" class="font-bold text-xs px-5 py-2 rounded-xl active:scale-95 transition-all custom-bg-accent text-black">Salva</button>
+                <button id="modalSaveBtn" class="font-bold text-xs px-5 py-2 rounded-xl active:scale-95 transition-all custom-bg-accent" style="color:#1a1305;">Salva</button>
             </div>
         </div>
     </div>
 
     <script>
-        const themes = {
-            spotifyGreen: { name: "Spotify Green", bgMain: "#090909", bgCard: "rgba(18, 18, 18, 0.45)", bgInput: "rgba(28, 28, 28, 0.6)", accent: "#1DB954", textMain: "#ffffff", textMuted: "#a3a3a3", isLight: 0 },
-            synthwave:    { name: "Synthwave Retro", bgMain: "#1a0b2e", bgCard: "rgba(35, 14, 59, 0.45)", bgInput: "rgba(51, 15, 87, 0.6)", accent: "#ff007f", textMain: "#ffffff", textMuted: "#b39ddb", isLight: 0 },
-            amberGold:    { name: "Amber Gold", bgMain: "#120d03", bgCard: "rgba(30, 22, 8, 0.45)", bgInput: "rgba(45, 33, 12, 0.6)", accent: "#ffb300", textMain: "#ffffff", textMuted: "#d7ccc8", isLight: 0 },
-            amoledWhite:  { name: "Pure AMOLED", bgMain: "#000000", bgCard: "rgba(0, 0, 0, 0.5)", bgInput: "rgba(18, 18, 18, 0.6)", accent: "#ffffff", textMain: "#ffffff", textMuted: "#888888", isLight: 0 },
-            cyberPurple:  { name: "Cyber Purple", bgMain: "#07040a", bgCard: "rgba(15, 9, 22, 0.45)", bgInput: "rgba(25, 17, 36, 0.6)", accent: "#bf5af2", textMain: "#ffffff", textMuted: "#9893a5", isLight: 0 },
-            deepBlue:     { name: "Oceanic Depth", bgMain: "#03070d", bgCard: "rgba(8, 16, 28, 0.45)", bgInput: "rgba(16, 30, 51, 0.6)", accent: "#0a84ff", textMain: "#ffffff", textMuted: "#8e9bb4", isLight: 0 },
-            lavaRed:      { name: "Lava Crimson", bgMain: "#0a0404", bgCard: "rgba(18, 9, 9, 0.45)", bgInput: "rgba(30, 17, 17, 0.6)", accent: "#ff453a", textMain: "#ffffff", textMuted: "#aa9999", isLight: 0 },
-            dracula:      { name: "Dracula", bgMain: "#1e1f29", bgCard: "rgba(40, 42, 54, 0.45)", bgInput: "rgba(53, 56, 73, 0.6)", accent: "#ff79c6", textMain: "#f8f8f2", textMuted: "#6272a4", isLight: 0 },
-            nordicIce:    { name: "Nordic Frost", bgMain: "#101419", bgCard: "rgba(23, 30, 38, 0.45)", bgInput: "rgba(36, 47, 59, 0.6)", accent: "#88c0d0", textMain: "#e5e9f0", textMuted: "#81a1c1", isLight: 0 },
-            midnightSun:  { name: "Midnight Sun", bgMain: "#0d0c14", bgCard: "rgba(24, 22, 38, 0.45)", bgInput: "rgba(37, 34, 59, 0.6)", accent: "#ff9f1c", textMain: "#ffffff", textMuted: "#9a8c99", isLight: 0 },
-            emeraldDark:  { name: "Emerald", bgMain: "#050d0a", bgCard: "rgba(10, 28, 21, 0.45)", bgInput: "rgba(16, 45, 33, 0.6)", accent: "#2ecc71", textMain: "#ffffff", textMuted: "#95a5a6", isLight: 0 },
-            tokyoNight:   { name: "Tokyo Night", bgMain: "#0a0d16", bgCard: "rgba(21, 25, 43, 0.45)", bgInput: "rgba(34, 40, 68, 0.6)", accent: "#7aa2f7", textMain: "#acb0d0", textMuted: "#565f89", isLight: 0 },
-            electricLime: { name: "Electric Lime", bgMain: "#080a04", bgCard: "rgba(20, 26, 12, 0.45)", bgInput: "rgba(32, 41, 19, 0.6)", accent: "#a6e22e", textMain: "#ffffff", textMuted: "#a0a39a", isLight: 0 },
-            cherryBlossom:{ name: "Cherry Blossom", bgMain: "#140a0e", bgCard: "rgba(36, 18, 25, 0.45)", bgInput: "rgba(56, 28, 39, 0.6)", accent: "#ffb7c5", textMain: "#ffffff", textMuted: "#e0b0bc", isLight: 0 },
-            cyberpunk2077:{ name: "Cyberpunk 2077", bgMain: "#0a0a03", bgCard: "rgba(31, 31, 10, 0.45)", bgInput: "rgba(48, 48, 15, 0.6)", accent: "#fcee0a", textMain: "#ffffff", textMuted: "#91918a", isLight: 0 }
-        };
-
+        // Estetica unica dell'app (niente più palette multiple/AMOLED): i colori sono
+        // fissi, definiti nel token system CSS in testa al documento.
         let appState = {
             apiKey: localStorage.getItem('youtubette_api_key') || '',
-            currentTheme: localStorage.getItem('youtubette_theme') || 'spotifyGreen',
-            isAmoled: localStorage.getItem('youtubette_amoled') === 'true',
             tracks: [],
             currentIndex: -1,
             isPlaying: false,
             // Filtri della ricerca manuale (barra in alto): parte sempre da "qualsiasi",
             // sarà l'utente a cambiarli di volta in volta dal pannello filtri.
             filterDate: 'any',
-            filterDuration: 'any',
-            // Filtri delle playlist (cerchi in home): valori di default fissi (Oggi / Breve),
-            // ma personalizzabili dalle Impostazioni e persistenti tra le sessioni.
-            playlistFilterDate: localStorage.getItem('youtubette_playlist_filter_date') || 'today',
-            playlistFilterDuration: localStorage.getItem('youtubette_playlist_filter_duration') || 'short',
-            quickSearches: JSON.parse(localStorage.getItem('youtubette_quick_searches') || '[]')
+            filterDuration: 'any'
         };
         let deferredPrompt, nextSearchPageToken = '', isFetchingMore = false;
-        // 'youtube' = lista da ricerca/ricerca rapida (con paginazione YouTube),
+        // 'youtube' = lista da ricerca (con paginazione YouTube),
         // 'spotify' = lista importata da una playlist Spotify (brani senza id YouTube
         // finché non vengono riprodotti la prima volta).
         let currentListSource = 'youtube';
-        // Vero se la ricerca correntemente mostrata/paginata è stata avviata da una playlist
-        // (cerchio in home) e quindi deve continuare a usare i filtri playlist anche per il
-        // caricamento delle pagine successive, invece di quelli della ricerca manuale.
-        let currentSearchIsQuickSearch = false;
         let isScrubbing = false; 
         let scrubPercentage = 0;
         
@@ -851,10 +699,8 @@
         const searchContainer = document.getElementById('searchContainer');
         const searchInput = document.getElementById('searchInput');
         const searchTriggerBtn = document.getElementById('searchTriggerBtn');
-        const searchIcon = document.getElementById('searchIcon');
         const filterToggleBtn = document.getElementById('filterToggleBtn');
         const filterMenu = document.getElementById('filterMenu');
-        const headerTitle = document.getElementById('headerTitle');
 
         const swipeTitle = document.getElementById('swipeTitleContainer');
         const marqueeContent = document.getElementById('marqueeContent');
@@ -1045,13 +891,8 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            applyTheme(appState.currentTheme);
-            applyAmoledState(appState.isAmoled);
-            setupCustomSelect();
             setupFilterDropdowns();
-            setupPlaylistFilterDropdowns();
-            renderQuickSearchHome();
-            renderQuickSearchManageList();
+            renderRecentHome();
 
             document.body.classList.remove('hidden');
             window.history.replaceState({ page: 'main' }, 'Main');
@@ -1070,18 +911,6 @@
                 const apiModal = document.getElementById('apiModal');
                 if (apiModal && apiModal.classList.contains('active')) {
                     apiModal.classList.remove('active');
-                    handled = true;
-                }
-                // Barra di ricerca aperta (magari con del testo digitato) ma ancora sulla Home,
-                // cioè la ricerca non è stata eseguita: il back la richiude e cancella il testo,
-                // invece di far uscire dall'app o tornare indietro in altro modo.
-                const isShowingResultsForBack = document.getElementById('viewsSlider')?.classList.contains('showing-results');
-                if (!handled && searchContainer.classList.contains('active') && !isShowingResultsForBack) {
-                    searchInput.value = '';
-                    searchContainer.classList.remove('active');
-                    headerTitle.classList.remove('opacity-0');
-                    searchIcon.className = "fa-solid fa-magnifying-glass text-xs";
-                    filterMenu.classList.add('hidden');
                     handled = true;
                 }
                 // Vista Lista Canzoni: va chiusa (tornando alle playlist) SOLO se il back
@@ -1135,17 +964,11 @@
             });
 
             // GESTIONE INTEGRATA BARRA DI RICERCA
+            // La pillola di ricerca ora è sempre visibile in stile mockup (niente più
+            // comparsa/scomparsa): il tasto lente si limita a inviare la ricerca, come Invio.
             searchTriggerBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                if (!searchContainer.classList.contains('active')) {
-                    searchContainer.classList.add('active');
-                    headerTitle.classList.add('opacity-0');
-                    searchIcon.className = "fa-solid fa-arrow-right text-xs";
-                    searchInput.focus();
-                    window.history.pushState({ page: 'search' }, 'Search');
-                } else {
-                    handleSearchSubmit();
-                }
+                handleSearchSubmit();
             });
 
             searchInput.addEventListener('keypress', (e) => { 
@@ -1162,15 +985,7 @@
             });
 
             function closeSearch() {
-                searchContainer.classList.remove('active');
-                headerTitle.classList.remove('opacity-0');
-                searchIcon.className = "fa-solid fa-magnifying-glass text-xs";
                 filterMenu.classList.add('hidden');
-                // Se lo stato 'search' pushato all'apertura è ancora in cima allo stack
-                // (cioè non è stato già consumato dal pulsante indietro), lo rimuoviamo qui.
-                if (window.history.state && window.history.state.page === 'search') {
-                    window.history.back();
-                }
             }
 
             // La stessa barra di ricerca serve sia per cercare su YouTube (testo libero)
@@ -1317,7 +1132,6 @@
                 window.history.back();
             });
             document.getElementById('modalSaveBtn').addEventListener('click', saveSettingsFromModal);
-            document.getElementById('addQuickSearchBtn').addEventListener('click', addQuickSearchFromModal);
 
             // Click fuori dal popup (sul backdrop) chiude il menu impostazioni
             document.getElementById('apiModal').addEventListener('click', (e) => {
@@ -1326,15 +1140,6 @@
                     window.history.back();
                 }
             });
-
-            const amoledCheckbox = document.getElementById('amoledToggle');
-            if (amoledCheckbox) {
-                amoledCheckbox.checked = appState.isAmoled;
-                amoledCheckbox.addEventListener('change', (e) => {
-                    appState.isAmoled = e.target.checked;
-                    applyAmoledState(appState.isAmoled);
-                });
-            }
 
             setupSwipeHandlers();
             setupSheetCloseSwipe();
@@ -1372,39 +1177,6 @@
             if (window.history.state && window.history.state.page === 'sheet') {
                 window.history.back();
             }
-        }
-
-        function setupCustomSelect() {
-            const trigger = document.getElementById('customSelectTrigger');
-            const optionsContainer = document.getElementById('customSelectOptions');
-            const selectedText = document.getElementById('customSelectedValue');
-
-            optionsContainer.innerHTML = '';
-            for (const [key, theme] of Object.entries(themes)) {
-                const opt = document.createElement('div');
-                opt.className = `custom-option px-4 py-3 ${key === appState.currentTheme ? 'selected' : ''}`;
-                opt.dataset.value = key;
-                opt.textContent = theme.name;
-                opt.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    document.querySelectorAll('.custom-option').forEach(el => el.classList.remove('selected'));
-                    opt.classList.add('selected');
-                    selectedText.textContent = theme.name;
-                    appState.currentTheme = key;
-                    applyTheme(key);
-                    optionsContainer.classList.remove('show');
-                });
-                optionsContainer.appendChild(opt);
-            }
-
-            trigger.addEventListener('click', (e) => {
-                e.stopPropagation();
-                optionsContainer.classList.toggle('show');
-            });
-
-            document.addEventListener('click', () => {
-                optionsContainer.classList.remove('show');
-            });
         }
 
         function setupFilterDropdowns() {
@@ -1449,60 +1221,6 @@
                     appState.filterDuration = opt.dataset.value;
                     durationOptions.classList.add('hidden');
                     performSearch(false);
-                });
-            });
-
-            document.addEventListener('click', () => {
-                dateOptions.classList.add('hidden');
-                durationOptions.classList.add('hidden');
-            });
-        }
-
-        // Dropdown filtri delle Playlist (home): valori indipendenti da quelli della ricerca
-        // manuale, salvati subito in localStorage così restano validi anche dopo un riavvio.
-        function setupPlaylistFilterDropdowns() {
-            const dateTrigger = document.getElementById('playlistFilterDateTrigger');
-            const dateOptions = document.getElementById('playlistFilterDateOptions');
-            const dateValue = document.getElementById('playlistFilterDateValue');
-
-            const durationTrigger = document.getElementById('playlistFilterDurationTrigger');
-            const durationOptions = document.getElementById('playlistFilterDurationOptions');
-            const durationValue = document.getElementById('playlistFilterDurationValue');
-            if (!dateTrigger || !durationTrigger) return;
-
-            dateTrigger.addEventListener('click', (e) => {
-                e.stopPropagation();
-                durationOptions.classList.add('hidden');
-                dateOptions.classList.toggle('hidden');
-            });
-
-            durationTrigger.addEventListener('click', (e) => {
-                e.stopPropagation();
-                dateOptions.classList.add('hidden');
-                durationOptions.classList.toggle('hidden');
-            });
-
-            dateOptions.querySelectorAll('.filter-option').forEach(opt => {
-                opt.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    dateOptions.querySelectorAll('.filter-option').forEach(el => el.classList.remove('selected', 'font-bold'));
-                    opt.classList.add('selected', 'font-bold');
-                    dateValue.textContent = opt.textContent;
-                    appState.playlistFilterDate = opt.dataset.value;
-                    localStorage.setItem('youtubette_playlist_filter_date', opt.dataset.value);
-                    dateOptions.classList.add('hidden');
-                });
-            });
-
-            durationOptions.querySelectorAll('.filter-option').forEach(opt => {
-                opt.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    durationOptions.querySelectorAll('.filter-option').forEach(el => el.classList.remove('selected', 'font-bold'));
-                    opt.classList.add('selected', 'font-bold');
-                    durationValue.textContent = opt.textContent;
-                    appState.playlistFilterDuration = opt.dataset.value;
-                    localStorage.setItem('youtubette_playlist_filter_duration', opt.dataset.value);
-                    durationOptions.classList.add('hidden');
                 });
             });
 
@@ -1868,41 +1586,6 @@
             activeScrubType = null;
         }
 
-        function applyTheme(themeKey) {
-            const theme = themes[themeKey] || themes.spotifyGreen;
-            const root = document.documentElement;
-            
-            root.style.setProperty('--bg-main', theme.bgMain);
-            root.style.setProperty('--bg-card', theme.bgCard);
-            root.style.setProperty('--bg-input', theme.bgInput);
-            root.style.setProperty('--accent', theme.accent);
-            root.style.setProperty('--text-main', theme.textMain);
-            root.style.setProperty('--text-muted', theme.textMuted);
-            root.style.setProperty('--is-light', theme.isLight);
-
-            // Aggiorna tutti i meta tag theme-color disponibili per costringere Firefox a ricolorare la barra
-            document.querySelectorAll('meta[name="theme-color"]').forEach(meta => {
-                meta.setAttribute('content', theme.bgMain);
-            });
-            
-            appState.currentTheme = themeKey;
-            localStorage.setItem('youtubette_theme', themeKey);
-            
-            const selectedText = document.getElementById('customSelectedValue');
-            if (selectedText) selectedText.textContent = theme.name;
-            
-            if (appState.currentIndex !== -1) renderTracklist();
-        }
-
-        function applyAmoledState(isAmoled) {
-            if (isAmoled) {
-                document.body.classList.add('amoled-active');
-            } else {
-                document.body.classList.remove('amoled-active');
-            }
-            localStorage.setItem('youtubette_amoled', isAmoled);
-        }
-
         function openApiModal() {
             const modal = document.getElementById('apiModal');
             const input = document.getElementById('modalApiKeyInput');
@@ -1921,9 +1604,6 @@
             const key = document.getElementById('modalApiKeyInput').value.trim();
             appState.apiKey = key;
             localStorage.setItem('youtubette_api_key', key);
-            localStorage.setItem('youtubette_theme', appState.currentTheme);
-            applyTheme(appState.currentTheme);
-            applyAmoledState(appState.isAmoled);
 
             document.getElementById('apiErrorBadge').classList.add('hidden');
             document.getElementById('modalApiBadgeError').classList.add('hidden');
@@ -1938,280 +1618,85 @@
             }, 800);
         }
 
-        // --- RICERCHE RAPIDE (scorciatoie a cerchio in home) ---
-        // L'artwork viene recuperato da Deezer (gratuito, senza chiave) come fonte
-        // primaria, con iTunes come ripiego. Deezer NON manda header CORS sulle risposte
-        // JSON normali, quindi lo interroghiamo in modalità JSONP (un tag <script>, non una
-        // fetch): è così che si aggira il blocco CORS, e non risente della quota/rate-limit
-        // di iTunes che stava causando "Nessuna nuova immagine trovata" in continuazione.
-        function jsonpRequest(url, timeoutMs = 8000) {
-            return new Promise((resolve, reject) => {
-                const callbackName = 'jsonp_cb_' + Math.random().toString(36).slice(2);
-                const script = document.createElement('script');
-                let settled = false;
+        // --- HOME: "Recenti" ---
+        // Cache automatica (non più gestita a mano) delle ultime 6 ricerche eseguite dalla
+        // barra in alto: sia ricerche di brani su YouTube, sia playlist Spotify incollate.
+        // Salvata in localStorage; la più recente viene evidenziata con l'accento (.latest).
+        const RECENT_STORAGE_KEY = 'youtubette_recent';
+        const RECENT_MAX = 6;
 
-                const cleanup = () => {
-                    delete window[callbackName];
-                    script.remove();
-                };
-
-                window[callbackName] = (data) => {
-                    if (settled) return;
-                    settled = true;
-                    cleanup();
-                    resolve(data);
-                };
-
-                script.onerror = () => {
-                    if (settled) return;
-                    settled = true;
-                    cleanup();
-                    reject(new Error('Errore caricamento script JSONP'));
-                };
-
-                setTimeout(() => {
-                    if (settled) return;
-                    settled = true;
-                    cleanup();
-                    reject(new Error('Timeout JSONP'));
-                }, timeoutMs);
-
-                const separator = url.includes('?') ? '&' : '?';
-                script.src = `${url}${separator}output=jsonp&callback=${callbackName}`;
-                document.body.appendChild(script);
-            });
-        }
-
-        // type: 'track' o 'album'. Restituisce l'array grezzo di risultati Deezer.
-        async function fetchDeezerResults(term, type) {
+        function loadRecentItems() {
             try {
-                const endpoint = type === 'album'
-                    ? 'https://api.deezer.com/search/album'
-                    : 'https://api.deezer.com/search/track';
-                const data = await jsonpRequest(`${endpoint}?q=${encodeURIComponent(term)}&limit=15`);
-                return (data && data.data) || [];
+                const raw = JSON.parse(localStorage.getItem(RECENT_STORAGE_KEY));
+                return Array.isArray(raw) ? raw : [];
             } catch (err) {
-                console.warn(`Impossibile recuperare risultati Deezer (${type}):`, err);
                 return [];
             }
         }
 
-        // Le tracce hanno la copertina annidata in item.album, gli album ce l'hanno diretta.
-        function extractDeezerArtwork(item, type) {
-            if (type === 'album') return item.cover_big || item.cover_medium || null;
-            return (item.album && (item.album.cover_big || item.album.cover_medium)) || null;
-        }
-
-        async function fetchArtworkForQuickSearch(term) {
-            const deezerTracks = await fetchDeezerResults(term, 'track');
-            if (deezerTracks.length > 0) {
-                const art = extractDeezerArtwork(deezerTracks[0], 'track');
-                if (art) return art;
-            }
-            // Ripiego su iTunes se Deezer non ha dato nulla
+        function saveRecentItems(items) {
             try {
-                const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=1&entity=musicTrack`);
-                const data = await res.json();
-                if (data.results && data.results[0] && data.results[0].artworkUrl100) {
-                    return data.results[0].artworkUrl100.replace('100x100bb', '400x400bb');
-                }
+                localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(items));
             } catch (err) {
-                console.warn('Impossibile recuperare artwork da iTunes:', err);
-            }
-            return null;
-        }
-
-        // Recupera una rosa di copertine per lo stesso termine di ricerca e ne
-        // sceglie una a caso, escludendo (quando possibile) quella già in uso,
-        // così il pulsante "Cambia immagine" restituisce davvero qualcosa di diverso.
-        // NOTA: le due entity (track e album, sia su Deezer che su iTunes) vengono
-        // interrogate in SEQUENZA, e quella per gli album solo se la prima non basta
-        // da sola: interrogarle in parallelo ad ogni tentativo moltiplicava le richieste
-        // verso le API, rischiando di sforarne la quota inutilmente.
-        async function fetchItunesResults(term, entity) {
-            try {
-                const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&limit=15&entity=${entity}`);
-                const data = await res.json();
-                return data.results || [];
-            } catch (err) {
-                console.warn(`Impossibile recuperare risultati iTunes (${entity}):`, err);
-                return [];
+                console.warn('Impossibile salvare le ricerche recenti:', err);
             }
         }
 
-        async function fetchRandomArtworkForQuickSearch(term, excludeUrl) {
-            let candidates = [...new Set(
-                (await fetchDeezerResults(term, 'track'))
-                    .map(r => extractDeezerArtwork(r, 'track'))
-                    .filter(Boolean)
-            )];
-
-            // Query aggiuntiva sugli album solo se i brani non bastano a dare varietà:
-            // per termini generici (es. un genere come "R&B") una sola ricerca di tracce
-            // può restituire pochi risultati distinti.
-            if (candidates.length < 5) {
-                const albumCandidates = (await fetchDeezerResults(term, 'album'))
-                    .map(r => extractDeezerArtwork(r, 'album'))
-                    .filter(Boolean);
-                candidates = [...new Set([...candidates, ...albumCandidates])];
-            }
-
-            // Se Deezer non ha dato proprio nulla (rete/blocco diverso da iTunes),
-            // ripieghiamo sull'API di iTunes come seconda fonte.
-            if (candidates.length === 0) {
-                candidates = [...new Set(
-                    (await fetchItunesResults(term, 'musicTrack'))
-                        .filter(r => r.artworkUrl100)
-                        .map(r => r.artworkUrl100.replace('100x100bb', '400x400bb'))
-                )];
-                if (candidates.length < 5) {
-                    const albumCandidates = (await fetchItunesResults(term, 'album'))
-                        .filter(r => r.artworkUrl100)
-                        .map(r => r.artworkUrl100.replace('100x100bb', '400x400bb'));
-                    candidates = [...new Set([...candidates, ...albumCandidates])];
-                }
-            }
-
-            if (excludeUrl && candidates.length > 1) {
-                candidates = candidates.filter(c => c !== excludeUrl);
-            }
-            if (candidates.length > 0) {
-                return candidates[Math.floor(Math.random() * candidates.length)];
-            }
-            return null;
+        // Aggiunge (o riporta in cima, se già presente) una voce alla cache Recenti.
+        // type: 'song' per una ricerca YouTube, 'playlist' per un import Spotify.
+        function addRecentItem({ name, type, query = null, url = null, artwork = null }) {
+            if (!name) return;
+            let items = loadRecentItems();
+            items = items.filter(it => {
+                if (it.type !== type) return true;
+                return type === 'playlist' ? it.url !== url : it.query !== query;
+            });
+            items.unshift({ name, type, query, url, artwork, ts: Date.now() });
+            items = items.slice(0, RECENT_MAX);
+            saveRecentItems(items);
+            renderRecentHome();
         }
 
-        async function refreshQuickSearchArtwork(id) {
-            const qs = appState.quickSearches.find(q => q.id === id);
-            if (!qs) return;
+        function renderRecentHome() {
+            const grid = document.getElementById('recentGrid');
+            const empty = document.getElementById('emptyHome');
+            if (!grid) return;
 
-            const btn = document.querySelector(`.quickSearchRefreshBtn[data-id="${id}"]`);
-            const icon = btn ? btn.querySelector('i') : null;
-            if (btn) btn.disabled = true;
-            if (icon) icon.classList.add('fa-spin');
-
-            const newArtwork = await fetchRandomArtworkForQuickSearch(qs.name, qs.artwork)
-                || await fetchRandomArtworkForQuickSearch(qs.query, qs.artwork);
-
-            if (newArtwork) {
-                qs.artwork = newArtwork;
-                saveQuickSearches();
-                renderQuickSearchManageList();
-                renderQuickSearchHome();
-            } else {
-                showToast("Nessuna nuova immagine trovata.");
-                if (icon) icon.classList.remove('fa-spin');
-                if (btn) btn.disabled = false;
-            }
-        }
-
-        function saveQuickSearches() {
-            localStorage.setItem('youtubette_quick_searches', JSON.stringify(appState.quickSearches));
-        }
-
-        async function addQuickSearchFromModal() {
-            const queryInput = document.getElementById('quickSearchQueryInput');
-            const nameInput = document.getElementById('quickSearchNameInput');
-            const query = queryInput.value.trim();
-            const name = nameInput.value.trim();
-            if (!query || !name) return;
-
-            const addBtn = document.getElementById('addQuickSearchBtn');
-            addBtn.disabled = true;
-            addBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Ricerca copertina...';
-
-            const artwork = await fetchArtworkForQuickSearch(name) || await fetchArtworkForQuickSearch(query);
-
-            appState.quickSearches.push({ id: 'qs_' + Date.now(), query, name, artwork });
-            saveQuickSearches();
-            renderQuickSearchManageList();
-            renderQuickSearchHome();
-
-            queryInput.value = '';
-            nameInput.value = '';
-            addBtn.disabled = false;
-            addBtn.innerHTML = '<i class="fa-solid fa-plus mr-1.5"></i> Aggiungi Scorciatoia';
-        }
-
-        function deleteQuickSearch(id) {
-            appState.quickSearches = appState.quickSearches.filter(qs => qs.id !== id);
-            saveQuickSearches();
-            renderQuickSearchManageList();
-            renderQuickSearchHome();
-        }
-
-        function renderQuickSearchManageList() {
-            const container = document.getElementById('quickSearchManageList');
-            if (!container) return;
-
-            if (appState.quickSearches.length === 0) {
-                container.innerHTML = '<p class="text-[10px] italic text-center custom-text-muted py-2">Nessuna scorciatoia salvata.</p>';
+            const items = loadRecentItems();
+            if (items.length === 0) {
+                grid.classList.add('hidden');
+                grid.innerHTML = '';
+                if (empty) empty.classList.remove('hidden');
                 return;
             }
 
-            container.innerHTML = appState.quickSearches.map(qs => `
-                <div class="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2">
-                    <div class="flex items-center min-w-0 flex-1 mr-2">
-                        <div class="w-6 h-6 rounded-full overflow-hidden bg-neutral-800 shrink-0 mr-2 flex items-center justify-center">
-                            ${qs.artwork ? `<img src="${qs.artwork}" class="w-full h-full object-cover" alt="">` : '<i class="fa-solid fa-music text-[9px] custom-text-muted"></i>'}
-                        </div>
-                        <span class="text-xs text-white truncate">${escapeHtml(qs.name)}</span>
+            if (empty) empty.classList.add('hidden');
+            grid.classList.remove('hidden');
+            grid.innerHTML = items.map((it, i) => `
+                <div class="qcard${i === 0 ? ' latest' : ''}" data-index="${i}">
+                    <div class="circle" style="${it.artwork ? `background-image:url('${it.artwork.replace(/'/g, "\\'")}')` : ''}">
+                        <span class="badge"><i class="fa-solid ${it.type === 'playlist' ? 'fa-list' : 'fa-music'}"></i></span>
                     </div>
-                    <div class="flex items-center gap-1 shrink-0">
-                        <button data-id="${qs.id}" class="quickSearchRefreshBtn text-neutral-400 hover:text-[var(--accent)] text-xs p-1.5" title="Cambia immagine">
-                            <i class="fa-solid fa-arrows-rotate"></i>
-                        </button>
-                        <button data-id="${qs.id}" class="quickSearchDeleteBtn text-neutral-400 hover:text-red-500 text-xs p-1.5">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
-                    </div>
+                    <div class="name">${escapeHtml(it.name)}</div>
                 </div>
             `).join('');
 
-            container.querySelectorAll('.quickSearchRefreshBtn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    refreshQuickSearchArtwork(btn.dataset.id);
-                });
-            });
-
-            container.querySelectorAll('.quickSearchDeleteBtn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    deleteQuickSearch(btn.dataset.id);
+            grid.querySelectorAll('.qcard').forEach(card => {
+                card.addEventListener('click', () => {
+                    const idx = parseInt(card.dataset.index, 10);
+                    openRecentItem(items[idx]);
                 });
             });
         }
 
-        function renderQuickSearchHome() {
-            const container = document.getElementById('quickSearchHome');
-            const placeholderText = document.getElementById('placeholderText');
-            if (!container) return;
-
-            if (appState.quickSearches.length === 0) {
-                container.classList.add('hidden');
-                container.innerHTML = '';
-                if (placeholderText) placeholderText.classList.remove('hidden');
-                return;
+        function openRecentItem(item) {
+            if (!item) return;
+            if (item.type === 'playlist' && item.url) {
+                importSpotifyPlaylist(item.url);
+            } else if (item.query) {
+                searchInput.value = item.query;
+                performSearch(false);
             }
-
-            if (placeholderText) placeholderText.classList.add('hidden');
-            container.classList.remove('hidden');
-            container.innerHTML = appState.quickSearches.map(qs => `
-                <div class="quickSearchCircle flex flex-col items-center cursor-pointer active:scale-95 transition-transform" data-query="${escapeHtml(qs.query)}">
-                    <div class="w-24 h-24 rounded-full overflow-hidden bg-white/5 border border-white/10 shadow-md flex items-center justify-center mb-2">
-                        ${qs.artwork ? `<img src="${qs.artwork}" class="w-full h-full object-cover" alt="">` : '<i class="fa-solid fa-music text-2xl custom-text-muted"></i>'}
-                    </div>
-                    <span class="text-xs font-semibold text-white text-center leading-tight line-clamp-2">${escapeHtml(qs.name)}</span>
-                </div>
-            `).join('');
-
-            container.querySelectorAll('.quickSearchCircle').forEach(circle => {
-                circle.addEventListener('click', () => {
-                    searchInput.value = circle.dataset.query;
-                    performSearch(false, true);
-                });
-            });
         }
 
         async function redirectToDownload() {
@@ -2359,7 +1844,7 @@
             return now.toISOString();
         }
 
-        async function performSearch(isLoadMore = false, isQuickSearch = false) {
+        async function performSearch(isLoadMore = false) {
             const query = searchInput.value.trim();
             const resultsStatusText = document.getElementById('resultsStatusText');
             
@@ -2367,19 +1852,13 @@
 
             if (!appState.apiKey) { 
                 showVisualApiError();
-                const placeholderText = document.getElementById('placeholderText');
-                if (placeholderText) placeholderText.innerHTML = `<span class="text-red-500 font-bold block mb-1">Chiave API Mancante!</span> Clicca sull'icona delle impostazioni in alto a sinistra per configurarla.`;
                 openApiModal(); 
                 return; 
             }
 
             if (!isLoadMore) {
-                // Memorizza il contesto della ricerca (playlist o ricerca manuale) così che
-                // anche il caricamento automatico delle pagine successive (isLoadMore) continui
-                // ad usare gli stessi filtri, invece di quelli dell'altro contesto.
-                currentSearchIsQuickSearch = isQuickSearch;
                 currentListSource = 'youtube';
-                showResultsView();
+                showResultsView(query);
                 appState.tracks = []; appState.currentIndex = -1; nextSearchPageToken = '';
                 toggleDownloadButtons(false);
                 document.getElementById('trackList').innerHTML = '';
@@ -2387,8 +1866,8 @@
             } else isFetchingMore = true;
 
             try {
-                const activeFilterDate = currentSearchIsQuickSearch ? appState.playlistFilterDate : appState.filterDate;
-                const activeFilterDuration = currentSearchIsQuickSearch ? appState.playlistFilterDuration : appState.filterDuration;
+                const activeFilterDate = appState.filterDate;
+                const activeFilterDuration = appState.filterDuration;
 
                 let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=25&q=${encodeURIComponent(query)}&type=video&videoEmbeddable=true&key=${appState.apiKey}`;
                 
@@ -2423,6 +1902,10 @@
 
                 appState.tracks = appState.tracks.concat(newTracks);
                 renderTracklist(isLoadMore ? previousCount : 0);
+
+                if (!isLoadMore && newTracks.length > 0) {
+                    addRecentItem({ name: query, type: 'song', query, artwork: newTracks[0].thumbnail });
+                }
             } catch (error) {
                 showVisualApiError();
                 if (resultsStatusText && !isLoadMore) {
@@ -2516,12 +1999,37 @@
             return match ? match[1] : null;
         }
 
+        // Ricava nome e copertina della playlist dalla risposta già scaricata per i brani
+        // (nessuna richiesta aggiuntiva), gestendo sia il formato testo/markdown di r.jina.ai
+        // sia il fallback HTML grezzo.
+        function extractSpotifyPlaylistMeta(fetched) {
+            let name = null, cover = null;
+            if (fetched.type === 'text') {
+                const titleMatch = fetched.data.match(/^Title:\s*(.+)$/m);
+                const h1Match = fetched.data.match(/^#\s+([^\n#][^\n]*)/m);
+                name = (titleMatch && titleMatch[1].trim()) || (h1Match && h1Match[1].trim()) || null;
+                cover = extractSpotifyPlaylistCover(fetched.data);
+            } else {
+                try {
+                    const doc = new DOMParser().parseFromString(fetched.data, 'text/html');
+                    const titleTag = doc.querySelector('title');
+                    if (titleTag) name = titleTag.textContent.replace(/\s*[|\-–]\s*Spotify.*$/i, '').trim();
+                    const ogImage = doc.querySelector('meta[property="og:image"]');
+                    const firstImg = doc.querySelector('img');
+                    cover = (ogImage && ogImage.getAttribute('content')) || (firstImg && firstImg.src) || null;
+                } catch (err) {
+                    console.warn('Impossibile estrarre nome/copertina playlist:', err);
+                }
+            }
+            return { name: name || 'Playlist Spotify', cover };
+        }
+
         async function importSpotifyPlaylist(url) {
             const resultsStatusText = document.getElementById('resultsStatusText');
             const playlistId = extractSpotifyPlaylistId(url);
 
             if (!playlistId) {
-                showResultsView();
+                showResultsView('Risultati');
                 appState.tracks = []; appState.currentIndex = -1;
                 document.getElementById('trackList').innerHTML = '';
                 if (resultsStatusText) {
@@ -2533,7 +2041,7 @@
 
             currentListSource = 'spotify';
             nextSearchPageToken = '';
-            showResultsView();
+            showResultsView('Playlist Spotify');
             appState.tracks = []; appState.currentIndex = -1;
             toggleDownloadButtons(false);
             document.getElementById('trackList').innerHTML = '';
@@ -2565,6 +2073,10 @@
 
                 if (resultsStatusText) resultsStatusText.classList.add('hidden');
                 renderTracklist(0);
+
+                const meta = extractSpotifyPlaylistMeta(fetched);
+                showResultsView(meta.name);
+                addRecentItem({ name: meta.name, type: 'playlist', url, artwork: meta.cover });
             } catch (err) {
                 console.warn('Import playlist Spotify fallito:', err);
                 if (resultsStatusText) {
@@ -2581,17 +2093,24 @@
         }
 
         // Copertina per un singolo brano importato da Spotify, tramite l'API pubblica di
-        // iTunes (stessa già usata per le ricerche rapide): nessuna chiave, nessuna quota
-        // YouTube coinvolta. Se il brano viene poi risolto su YouTube (playTrack), la sua
-        // miniatura verrà sostituita da quella del video.
+        // iTunes: nessuna chiave, nessuna quota YouTube coinvolta. Se il brano viene poi
+        // risolto su YouTube (playTrack), la sua miniatura verrà sostituita da quella del video.
         async function fetchTrackArtworkFromItunes(track, index) {
             if (track.id || track.artworkFetched) return;
             track.artworkFetched = true;
-            const artwork = await fetchArtworkForQuickSearch(`${track.title} ${track.channel}`);
-            if (artwork && !track.id) {
-                track.thumbnail = artwork;
-                const img = document.getElementById(`track-img-${index}`);
-                if (img) img.src = artwork;
+            try {
+                const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${track.title} ${track.channel}`)}&limit=1&entity=musicTrack`);
+                const data = await res.json();
+                const artwork = data.results && data.results[0] && data.results[0].artworkUrl100
+                    ? data.results[0].artworkUrl100.replace('100x100bb', '400x400bb')
+                    : null;
+                if (artwork && !track.id) {
+                    track.thumbnail = artwork;
+                    const img = document.getElementById(`track-img-${index}`);
+                    if (img) img.src = artwork;
+                }
+            } catch (err) {
+                console.warn('Impossibile recuperare copertina da iTunes:', err);
             }
         }
 
@@ -2602,8 +2121,6 @@
         async function resolveYoutubeIdForTrack(track, index) {
             if (!appState.apiKey) {
                 showVisualApiError();
-                const placeholderText = document.getElementById('placeholderText');
-                if (placeholderText) placeholderText.innerHTML = `<span class="text-red-500 font-bold block mb-1">Chiave API Mancante!</span> Clicca sull'icona delle impostazioni in alto a sinistra per configurarla.`;
                 openApiModal();
                 return false;
             }
@@ -2655,13 +2172,16 @@
         }
 
         // --- NAVIGAZIONE ANIMATA TRA VISTA PLAYLIST E VISTA LISTA CANZONI ---
-        function showResultsView() {
+        function showResultsView(title) {
             const slider = document.getElementById('viewsSlider');
+            if (title) {
+                const resultsTitle = document.getElementById('resultsTitle');
+                if (resultsTitle) resultsTitle.textContent = title;
+            }
             if (!slider || slider.classList.contains('showing-results')) return;
             slider.classList.add('showing-results');
-            document.getElementById('backToHomeBtn')?.classList.add('visible');
-            document.getElementById('menuButtonsGroup')?.classList.add('shift-right');
-            document.getElementById('headerLeftGroup')?.classList.add('shift-right');
+            document.getElementById('homeHeader')?.classList.add('hidden');
+            document.getElementById('resultsHeader')?.classList.add('visible');
             window.history.pushState({ page: 'results' }, 'Results');
         }
 
@@ -2669,9 +2189,8 @@
             const slider = document.getElementById('viewsSlider');
             if (!slider) return;
             slider.classList.remove('showing-results');
-            document.getElementById('backToHomeBtn')?.classList.remove('visible');
-            document.getElementById('menuButtonsGroup')?.classList.remove('shift-right');
-            document.getElementById('headerLeftGroup')?.classList.remove('shift-right');
+            document.getElementById('homeHeader')?.classList.remove('hidden');
+            document.getElementById('resultsHeader')?.classList.remove('visible');
         }
 
         function escapeHtml(text) {
@@ -2705,20 +2224,22 @@
 
             for (let index = fromIndex; index < appState.tracks.length; index++) {
                 const track = appState.tracks[index];
+                const isPlaying = appState.currentIndex === index;
                 const trackRow = document.createElement('div');
                 trackRow.id = `track-row-${index}`;
-                trackRow.className = `track-row-enter flex items-center p-2.5 rounded-2xl cursor-pointer transition-all border hover:bg-white/5 active:bg-white/10 ${appState.currentIndex === index ? 'bg-white/10 border-white/10' : 'border-transparent'}`;
+                trackRow.className = `track-row track-row-enter flex items-center gap-3.5 py-2.5 cursor-pointer transition-colors hover:bg-white/5 active:bg-white/10`;
                 // Scaglionato dall'alto verso il basso: ogni riga appare poco dopo la precedente,
                 // così il caricamento (immagini, dati) resta mascherato dall'animazione stessa.
                 trackRow.style.animationDelay = `${Math.min(index - fromIndex, 20) * 45}ms`;
 
                 trackRow.innerHTML = `
-                    <div class="w-14 h-14 rounded-full overflow-hidden mr-3 shadow-md shrink-0 flex items-center justify-center bg-neutral-800 relative">
+                    <div class="w-13 h-13 rounded-[24%] overflow-hidden shrink-0 flex items-center justify-center bg-neutral-800 relative" style="width:52px;height:52px;">
                         <img id="track-img-${index}" src="${track.id ? `https://img.youtube.com/vi/${track.id}/mqdefault.jpg` : (track.thumbnail || '')}" class="w-full h-full object-cover track-thumb-img" alt="" onload="this.classList.add('loaded')">
                         ${!track.id ? '<i class="fa-brands fa-spotify absolute bottom-0.5 right-0.5 text-[10px] text-[var(--accent)] drop-shadow"></i>' : ''}
+                        ${isPlaying ? '<span class="track-playing-badge"><i class="fa-solid fa-volume-high"></i></span>' : ''}
                     </div>
                     <div class="flex-1 overflow-hidden">
-                        <p class="text-sm font-bold truncate ${appState.currentIndex === index ? 'custom-text-accent font-black' : 'text-white'}">${escapeHtml(track.title)}</p>
+                        <p class="text-sm font-bold truncate ${isPlaying ? 'custom-text-accent font-black' : 'text-white'}">${escapeHtml(track.title)}</p>
                         <p class="text-xs truncate mt-1 custom-text-muted font-medium">${escapeHtml(track.channel)}</p>
                     </div>
                 `;
