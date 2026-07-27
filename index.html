@@ -497,9 +497,15 @@
                 </div>
             </div>
 
-            <div class="flex items-center space-x-1 shrink-0" id="miniPlayerControls">
+            <div class="flex items-center gap-4 shrink-0" id="miniPlayerControls">
+                <button id="miniPrevBtn" class="text-[var(--text-main)] active:scale-90 transition-transform" style="font-size:17px;">
+                    <i class="fa-solid fa-backward-step"></i>
+                </button>
                 <button id="miniPlayPauseBtn" class="w-[38px] h-[38px] rounded-full flex items-center justify-center text-[15px] shadow-md custom-bg-accent transition-transform" style="color:#1a1305;">
                     <i class="fa-solid fa-play ml-0.5" id="miniPlayIcon"></i>
+                </button>
+                <button id="miniNextBtn" class="text-[var(--text-main)] active:scale-90 transition-transform" style="font-size:17px;">
+                    <i class="fa-solid fa-forward-step"></i>
                 </button>
             </div>
         </div>
@@ -570,12 +576,14 @@
                     </div>
                 </div>
 
-                <div class="flex items-center justify-between px-6 mb-8">
+                <div class="flex items-center justify-between px-2 mb-8">
+                    <button id="shuffleBtn" class="custom-text-muted active:scale-90 transition-transform" style="font-size:18px;"><i class="fa-solid fa-shuffle"></i></button>
                     <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step"></i></button>
                     <button id="playPauseBtn" class="w-[68px] h-[68px] rounded-full flex items-center justify-center text-[24px] shadow-2xl custom-bg-accent" style="color:#1a1305;">
                         <i class="fa-solid fa-play ml-1" id="playIcon"></i>
                     </button>
                     <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-forward-step"></i></button>
+                    <button id="favoriteBtn" class="custom-text-muted active:scale-90 transition-transform" style="font-size:18px;"><i class="fa-regular fa-heart" id="favoriteIcon"></i></button>
                 </div>
 
                 <div class="hidden md:flex items-center space-x-3 justify-center custom-text-muted px-4 py-2 bg-white/5 rounded-2xl mb-2">
@@ -940,6 +948,20 @@
 
             document.getElementById('prevBtn').addEventListener('click', prevTrack);
             document.getElementById('nextBtn').addEventListener('click', nextTrack);
+            document.getElementById('miniPrevBtn').addEventListener('click', prevTrack);
+            document.getElementById('miniNextBtn').addEventListener('click', nextTrack);
+
+            document.getElementById('shuffleBtn').addEventListener('click', (e) => {
+                e.currentTarget.classList.toggle('custom-text-accent');
+                e.currentTarget.classList.toggle('custom-text-muted');
+            });
+            document.getElementById('favoriteBtn').addEventListener('click', (e) => {
+                const icon = document.getElementById('favoriteIcon');
+                const isFav = icon.classList.toggle('fa-solid');
+                icon.classList.toggle('fa-regular', !isFav);
+                e.currentTarget.classList.toggle('custom-text-accent', isFav);
+                e.currentTarget.classList.toggle('custom-text-muted', !isFav);
+            });
 
             document.getElementById('sheetDownloadBtn').addEventListener('click', redirectToDownload);
             document.getElementById('volumeSlider')?.addEventListener('input', (e) => player?.setVolume(e.target.value));
