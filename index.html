@@ -355,14 +355,14 @@
 
         /* ================= HEADER: home (menu + titolo + pillola ricerca) ================= */
         .home-header { padding: 4px 6px 0; }
-        .home-header-row { display:flex; align-items:center; justify-content:space-between; gap:10px; height:40px; }
-        .menu-icon-btn { position:relative; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); flex:0 0 auto; }
+        .home-header-row { display:flex; align-items:center; justify-content:flex-start; gap:10px; height:40px; }
+        .menu-icon-btn { position:relative; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:transparent; flex:0 0 auto; }
         .menu-bars { width:18px; height:13px; display:flex; flex-direction:column; justify-content:space-between; }
         .menu-bars span { display:block; height:2px; border-radius:2px; background:var(--text-main); width:100%; }
         .menu-bars span:last-child { width:65%; }
         .error-badge { position:absolute; top:6px; right:6px; width:9px; height:9px; border-radius:50%; background:#ff4d4d; border:1px solid var(--bg-main); }
-        .app-title { flex:1; font-size:26px; font-weight:700; letter-spacing:-0.01em; text-align:center; margin:0; }
-        .update-btn { position:relative; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); color:var(--text-main); flex:0 0 auto; }
+        .app-title { font-size:26px; font-weight:700; letter-spacing:-0.01em; text-align:left; margin:0; }
+        .update-btn { position:relative; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); color:var(--text-main); flex:0 0 auto; margin-left:auto; }
         .update-dot { position:absolute; top:6px; right:6px; width:9px; height:9px; border-radius:50%; background:var(--accent); border:1px solid var(--bg-main); }
 
         .search-pill { margin-top:12px; background:var(--text-main); border-radius:999px; display:flex; align-items:center; gap:10px; padding:10px 14px; position:relative; }
@@ -748,6 +748,22 @@
         const miniProgressBarContainer = document.getElementById('miniProgressBarContainer');
         const miniProgressBar = document.getElementById('miniProgressBar');
 
+        // --- FEEDBACK APTICO: piccola vibrazione su pulsanti e swipe, dove supportato
+        // (iOS Safari/PWA non espone navigator.vibrate, quindi lì semplicemente non accade nulla). ---
+        function hapticFeedback(duration = 12) {
+            try {
+                if (navigator.vibrate) navigator.vibrate(duration);
+            } catch (e) { /* ignorato: la vibrazione non è mai bloccante */ }
+        }
+
+        // Delega globale: fa vibrare al click/tap di qualunque pulsante o elemento cliccabile,
+        // senza dover aggiungere una chiamata manuale ad ogni singolo handler esistente.
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('button, [role="button"], .track-row, .qcard, .settings-playlist-row, .settings-playlist-remove')) {
+                hapticFeedback();
+            }
+        }, true);
+
         // GESTIONE REGISTRAZIONE ED AGGIORNAMENTO PROTETTO DEL SERVICE WORKER
         let newWorker;
         let refreshing = false;
@@ -1111,11 +1127,13 @@
 
                     if (deltaX < -SWIPE_THRESHOLD && appState.tracks.length > 0) {
                         // Swipe sinistra: riapre la lista canzoni della playlist attiva
+                        hapticFeedback();
                         showResultsView();
                     } else if (deltaX > SWIPE_THRESHOLD) {
                         // Swipe destra: apre il menu impostazioni con animazione da sinistra
                         const apiModal = document.getElementById('apiModal');
                         if (apiModal && !apiModal.classList.contains('active')) {
+                            hapticFeedback();
                             openApiModal();
                             window.history.pushState({ page: 'modal' }, 'Modal');
                         }
@@ -1148,6 +1166,7 @@
                     const deltaX = e.changedTouches[0].clientX - startX;
                     const deltaY = e.changedTouches[0].clientY - startY;
                     if (deltaX > SWIPE_THRESHOLD && Math.abs(deltaX) > Math.abs(deltaY) * DIRECTION_RATIO) {
+                        hapticFeedback();
                         showHomeView();
                         window.history.back();
                     }
@@ -1314,6 +1333,7 @@
                     sheet.style.transition = '';
                     sheet.style.transform = '';
                     if (Math.abs(currentX) > 80) {
+                        hapticFeedback();
                         closeApiModal();
                         window.history.back();
                     }
@@ -1368,6 +1388,7 @@
                 nowPlayingSheet.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
                 
                 if (currentY > 100) {
+                    hapticFeedback();
                     closeNowPlayingSheet();
                 } else {
                     nowPlayingSheet.style.transform = '';
@@ -1489,11 +1510,14 @@
                     // rilascio): così la sheet viene sempre "atterrata" da dove si trova davvero,
                     // aperta o richiusa, e non resta mai abbandonata a metà.
                     const finalPercent = getSheetCurrentPercentY();
+                    hapticFeedback();
                     settleSheetDrag(finalPercent <= -100 * OPEN_DRAG_THRESHOLD);
                 }
                 else if (miniCurrentX > 80) {
+                    hapticFeedback();
                     prevTrack();
                 } else if (miniCurrentX < -80) {
+                    hapticFeedback();
                     nextTrack();
                 }
 
@@ -1536,8 +1560,8 @@
                 if (!isDraggingTitle) return;
                 isDraggingTitle = false;
                 swipeTitle.classList.remove('dragging');
-                if (titleCurrentX > 75) animateOutAndChange('right');
-                else if (titleCurrentX < -75) animateOutAndChange('left');
+                if (titleCurrentX > 75) { hapticFeedback(); animateOutAndChange('right'); }
+                else if (titleCurrentX < -75) { hapticFeedback(); animateOutAndChange('left'); }
                 else {
                     swipeTitle.style.transform = 'translate3d(0, 0, 0)';
                     swipeTitle.style.opacity = '1';
