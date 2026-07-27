@@ -555,14 +555,8 @@
             </div>
 
             <div class="flex items-center gap-4 shrink-0" id="miniPlayerControls">
-                <button id="miniPrevBtn" class="text-[var(--text-main)] active:scale-90 transition-transform" style="font-size:17px;">
-                    <i class="fa-solid fa-backward-step"></i>
-                </button>
                 <button id="miniPlayPauseBtn" class="w-[38px] h-[38px] rounded-full flex items-center justify-center text-[15px] shadow-md custom-bg-accent transition-transform" style="color:#1a1305;">
                     <i class="fa-solid fa-play ml-0.5" id="miniPlayIcon"></i>
-                </button>
-                <button id="miniNextBtn" class="text-[var(--text-main)] active:scale-90 transition-transform" style="font-size:17px;">
-                    <i class="fa-solid fa-forward-step"></i>
                 </button>
             </div>
         </div>
@@ -1092,8 +1086,6 @@
 
             document.getElementById('prevBtn').addEventListener('click', prevTrack);
             document.getElementById('nextBtn').addEventListener('click', nextTrack);
-            document.getElementById('miniPrevBtn').addEventListener('click', prevTrack);
-            document.getElementById('miniNextBtn').addEventListener('click', nextTrack);
 
             document.getElementById('shuffleBtn').addEventListener('click', (e) => {
                 e.currentTarget.classList.toggle('custom-text-accent');
@@ -1125,7 +1117,6 @@
                 window.history.pushState({ page: 'modal' }, 'Modal');
             });
             document.getElementById('backToHomeBtn').addEventListener('click', () => {
-                showHomeView();
                 window.history.back();
             });
 
@@ -1197,7 +1188,6 @@
                     const deltaY = e.changedTouches[0].clientY - startY;
                     if (deltaX > SWIPE_THRESHOLD && Math.abs(deltaX) > Math.abs(deltaY) * DIRECTION_RATIO) {
                         hapticFeedback();
-                        showHomeView();
                         window.history.back();
                     }
                 }, { passive: true });
@@ -2746,7 +2736,16 @@
             if (newRow) {
                 const newText = newRow.querySelector('p.text-sm');
                 if (newText) { newText.classList.remove('text-white'); newText.classList.add('custom-text-accent', 'font-black'); }
-                newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                // Lo scroll automatico alla riga va fatto SOLO se la vista playlist è
+                // davvero visibile in quel momento: se il brano viene cambiato dalla
+                // home (es. swipe sul mini player), la vista risultati è nascosta fuori
+                // schermo (traslata) e forzare lo scroll su un suo elemento rompeva il
+                // layout. Da home il brano cambia "silenziosamente"; se poi si riapre la
+                // playlist, il brano attivo è comunque già evidenziato correttamente.
+                const viewsSlider = document.getElementById('viewsSlider');
+                if (viewsSlider && viewsSlider.classList.contains('showing-results')) {
+                    newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
             }
 
             checkAndApplyMarquee();
