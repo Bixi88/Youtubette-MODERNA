@@ -1783,7 +1783,12 @@
             let items = loadRecentItems();
             items = items.filter(it => {
                 if (it.type !== type) return true;
-                return type === 'playlist' ? it.url !== url : it.query !== query;
+                if (type === 'playlist') return it.url !== url;
+                // 'song': la stessa canzone va sostituita (non duplicata) in cima ai Recenti,
+                // identificata dal video invece che dal testo digitato in ricerca, che può
+                // essere diverso pur portando alla stessa canzone.
+                if (track && track.id && it.track && it.track.id) return it.track.id !== track.id;
+                return it.query !== query;
             });
             items.unshift({ name, type, query, url, artwork, track, ts: Date.now() });
             items = items.slice(0, RECENT_MAX);
@@ -2116,10 +2121,6 @@
 
                 appState.tracks = appState.tracks.concat(newTracks);
                 renderTracklist(isLoadMore ? previousCount : 0);
-
-                if (!isLoadMore && newTracks.length > 0) {
-                    addRecentItem({ name: query, type: 'song', query, artwork: newTracks[0].thumbnail, track: newTracks[0] });
-                }
             } catch (error) {
                 showVisualApiError();
                 if (resultsStatusText && !isLoadMore) {
@@ -2436,6 +2437,9 @@
             slider.classList.remove('showing-results');
             document.getElementById('homeHeader')?.classList.remove('hidden');
             document.getElementById('resultsHeader')?.classList.remove('visible');
+            // La barra di ricerca in home deve ripartire vuota: il testo digitato serviva
+            // solo per la ricerca appena chiusa, non ha senso ritrovarselo tornando indietro.
+            if (searchInput) searchInput.value = '';
         }
 
         function escapeHtml(text) {
@@ -2560,6 +2564,19 @@
             } else if (track.id) {
                 sheetArtworkReadyPromise = displayArtwork(sheetImg, track.id);
                 displayArtwork(miniImg, track.id);
+            }
+
+            // Registra nei "Recenti" la canzone effettivamente scelta e ascoltata (titolo +
+            // artista reali), non il testo digitato in ricerca: la voce va creata qui, al
+            // momento della riproduzione, non quando si eseguiva la ricerca.
+            if (currentListSource === 'youtube' && track.id) {
+                addRecentItem({
+                    name: `${track.title} - ${track.channel}`,
+                    type: 'song',
+                    query: track.id,
+                    artwork: track.thumbnail || `https://img.youtube.com/vi/${track.id}/mqdefault.jpg`,
+                    track
+                });
             }
 
             if (miniPlayer) {
