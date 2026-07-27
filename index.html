@@ -321,6 +321,31 @@
             }
         }
 
+        /* ================= SETTINGS: lista "Playlist Recenti" ================= */
+        .settings-playlist-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 7px 6px; border-radius: 14px; cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+        .settings-playlist-row:active { background: rgba(255,255,255,0.05); }
+        .settings-playlist-thumb {
+            width: 36px; height: 36px; border-radius: 22%; flex: 0 0 auto;
+            background-color: var(--bg-input); background-size: cover; background-position: center;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-muted); font-size: 12px;
+        }
+        .settings-playlist-name {
+            flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            color: var(--text-main);
+        }
+        .settings-playlist-remove {
+            flex: 0 0 auto; width: 28px; height: 28px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-muted); font-size: 12px; background: rgba(255,255,255,0.05);
+        }
+        .settings-playlist-remove:active { color: var(--text-main); transform: scale(0.9); }
+
         /* ================= HEADER: home (menu + titolo + pillola ricerca) ================= */
         .home-header { padding: 4px 6px 0; }
         .home-header-row { display:flex; align-items:center; justify-content:space-between; gap:10px; height:40px; }
@@ -390,7 +415,6 @@
             <div class="home-header-row">
                 <button id="apiConfigBtn" class="menu-icon-btn" title="Impostazioni">
                     <span class="menu-bars"><span></span><span></span></span>
-                    <span id="apiErrorBadge" class="hidden error-badge"></span>
                 </button>
                 <h1 class="app-title display">YouTubette</h1>
                 <button id="appUpdateBtn" class="hidden update-btn" title="Aggiorna App">
@@ -620,6 +644,12 @@
                 </div>
                 <input type="text" id="modalApiKeyInput" placeholder="Incolla qui la tua chiave API..." 
                     class="w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
+            </div>
+
+            <div class="mt-6 border-t border-white/5 pt-4">
+                <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted mb-2">Playlist Recenti</label>
+                <div id="settingsPlaylistList" class="flex flex-col gap-1.5"></div>
+                <p id="settingsPlaylistEmpty" class="hidden text-xs custom-text-muted italic py-2">Nessuna playlist recente.</p>
             </div>
 
             <div class="flex items-center justify-end space-x-3 mt-6 border-t border-white/5 pt-4">
@@ -1525,12 +1555,95 @@
             activeScrubType = null;
         }
 
+        // --- SETTINGS: "Playlist Recenti" ---
+        // Elenco dedicato (separato dai "Recenti" mostrati in home, che mischiano brani e
+        // playlist e restano limitati a RECENT_MAX): qui teniamo fino a 9 playlist, mostrate
+        // nel pannello Impostazioni, ognuna cancellabile singolarmente con la X.
+        const RECENT_PLAYLISTS_KEY = 'youtubette_recent_playlists';
+        const RECENT_PLAYLISTS_MAX = 9;
+
+        function loadRecentPlaylists() {
+            try {
+                const raw = JSON.parse(localStorage.getItem(RECENT_PLAYLISTS_KEY));
+                return Array.isArray(raw) ? raw : [];
+            } catch (err) {
+                return [];
+            }
+        }
+
+        function saveRecentPlaylists(items) {
+            try {
+                localStorage.setItem(RECENT_PLAYLISTS_KEY, JSON.stringify(items));
+            } catch (err) {
+                console.warn('Impossibile salvare le playlist recenti:', err);
+            }
+        }
+
+        function addRecentPlaylist({ name, url, artwork = null }) {
+            if (!name || !url) return;
+            let items = loadRecentPlaylists();
+            items = items.filter(it => it.url !== url);
+            items.unshift({ name, url, artwork, ts: Date.now() });
+            // Oltre le 9, le voci più vecchie vengono tolte dalla cache.
+            items = items.slice(0, RECENT_PLAYLISTS_MAX);
+            saveRecentPlaylists(items);
+            renderSettingsPlaylistList();
+        }
+
+        function removeRecentPlaylist(url) {
+            const items = loadRecentPlaylists().filter(it => it.url !== url);
+            saveRecentPlaylists(items);
+            renderSettingsPlaylistList();
+        }
+
+        function renderSettingsPlaylistList() {
+            const list = document.getElementById('settingsPlaylistList');
+            const empty = document.getElementById('settingsPlaylistEmpty');
+            if (!list) return;
+
+            const items = loadRecentPlaylists();
+            if (items.length === 0) {
+                list.innerHTML = '';
+                if (empty) empty.classList.remove('hidden');
+                return;
+            }
+            if (empty) empty.classList.add('hidden');
+
+            list.innerHTML = items.map((it, i) => `
+                <div class="settings-playlist-row" data-url="${escapeHtml(it.url)}">
+                    <div class="settings-playlist-thumb" style="${it.artwork ? `background-image:url('${it.artwork.replace(/'/g, "\\'")}')` : ''}">
+                        ${it.artwork ? '' : '<i class="fa-solid fa-list"></i>'}
+                    </div>
+                    <span class="settings-playlist-name">${escapeHtml(it.name)}</span>
+                    <button class="settings-playlist-remove" data-index="${i}" title="Rimuovi">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            list.querySelectorAll('.settings-playlist-row').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    if (e.target.closest('.settings-playlist-remove')) return;
+                    importSpotifyPlaylist(row.dataset.url);
+                    closeApiModal();
+                });
+            });
+            list.querySelectorAll('.settings-playlist-remove').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const idx = parseInt(btn.dataset.index, 10);
+                    removeRecentPlaylist(items[idx].url);
+                });
+            });
+        }
+
         function openApiModal() {
             const modal = document.getElementById('apiModal');
             const input = document.getElementById('modalApiKeyInput');
             if (modal && input) {
                 input.value = appState.apiKey;
                 modal.classList.add('active');
+                renderSettingsPlaylistList();
             }
         }
 
@@ -1544,7 +1657,7 @@
             appState.apiKey = key;
             localStorage.setItem('youtubette_api_key', key);
 
-            document.getElementById('apiErrorBadge').classList.add('hidden');
+            document.getElementById('apiErrorBadge')?.classList.add('hidden');
             document.getElementById('modalApiBadgeError').classList.add('hidden');
 
             const saveBtn = document.getElementById('modalSaveBtn');
@@ -1850,7 +1963,7 @@
                     throw new Error(data.error.message);
                 }
 
-                document.getElementById('apiErrorBadge').classList.add('hidden');
+                document.getElementById('apiErrorBadge')?.classList.add('hidden');
                 document.getElementById('modalApiBadgeError').classList.add('hidden');
 
                 nextSearchPageToken = data.nextPageToken || '';
@@ -1986,6 +2099,35 @@
             return { name: name || 'Playlist Spotify', cover };
         }
 
+        // Copertina di ripiego per una playlist Spotify senza cover propria (og:image assente
+        // o non raggiungibile): pesca un brano a caso tra quelli della playlist e usa la sua
+        // copertina iTunes. Tenta al massimo su qualche brano (ordine mischiato), non su tutti,
+        // per non rallentare troppo l'import se molte ricerche iTunes falliscono.
+        async function fetchItunesArtworkFor(title, artist) {
+            try {
+                const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${title} ${artist}`)}&limit=1&entity=musicTrack`);
+                const data = await res.json();
+                return data.results && data.results[0] && data.results[0].artworkUrl100
+                    ? data.results[0].artworkUrl100.replace('100x100bb', '400x400bb')
+                    : null;
+            } catch (err) {
+                return null;
+            }
+        }
+
+        async function pickRandomPlaylistArtwork(rawTracks) {
+            const pool = [...rawTracks];
+            for (let i = pool.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [pool[i], pool[j]] = [pool[j], pool[i]];
+            }
+            for (const t of pool.slice(0, 5)) {
+                const artwork = await fetchItunesArtworkFor(t.title, t.artist);
+                if (artwork) return artwork;
+            }
+            return null;
+        }
+
         async function importSpotifyPlaylist(url) {
             const resultsStatusText = document.getElementById('resultsStatusText');
             const playlistId = extractSpotifyPlaylistId(url);
@@ -2038,7 +2180,9 @@
 
                 const meta = extractSpotifyPlaylistMeta(fetched);
                 showResultsView(meta.name);
-                addRecentItem({ name: meta.name, type: 'playlist', url, artwork: meta.cover });
+                const playlistArtwork = meta.cover || await pickRandomPlaylistArtwork(rawTracks);
+                addRecentItem({ name: meta.name, type: 'playlist', url, artwork: playlistArtwork });
+                addRecentPlaylist({ name: meta.name, url, artwork: playlistArtwork });
             } catch (err) {
                 console.warn('Import playlist Spotify fallito:', err);
                 if (resultsStatusText) {
@@ -2449,7 +2593,7 @@
         }
 
         function showVisualApiError() {
-            document.getElementById('apiErrorBadge').classList.remove('hidden');
+            document.getElementById('apiErrorBadge')?.classList.remove('hidden');
             document.getElementById('modalApiBadgeError').classList.remove('hidden');
         }
     </script>
