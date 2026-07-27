@@ -918,6 +918,12 @@
         // openNowPlayingSheetWhenArtworkReady), senza toccare il comportamento normale.
         let sheetArtworkReadyPromise = Promise.resolve();
 
+        // Stato per il popup "tocca di nuovo per uscire": armato dalla prima pressione
+        // di back in home (nessun'altra vista/overlay aperta), si disarma da solo dopo
+        // exitOnBackArmedTimeout se non arriva una seconda pressione in tempo.
+        let exitOnBackArmed = false;
+        let exitOnBackArmedTimeout = null;
+
         document.addEventListener('DOMContentLoaded', () => {
             setupFilterDropdowns();
             renderRecentHome();
@@ -952,6 +958,24 @@
                     showHomeView();
                     handled = true;
                 }
+
+                // Nessun overlay/vista da chiudere: siamo davvero in home e il back
+                // uscirebbe dalla webapp. Prima pressione: mostriamo il popup "tocca di
+                // nuovo per uscire" e ripristiniamo lo stato 'main', annullando l'uscita.
+                // Seconda pressione entro il tempo limite: non ripristiniamo nulla, e il
+                // back procede normalmente facendo uscire dalla webapp.
+                if (!handled && !(viewsSlider && viewsSlider.classList.contains('showing-results'))) {
+                    if (exitOnBackArmed) {
+                        clearTimeout(exitOnBackArmedTimeout);
+                        return;
+                    }
+                    exitOnBackArmed = true;
+                    exitOnBackArmedTimeout = setTimeout(() => { exitOnBackArmed = false; }, 2500);
+                    showToast('Tocca di nuovo per uscire');
+                    window.history.pushState({ page: 'main' }, 'Main');
+                    return;
+                }
+
                 if (handled) {
                     const nowPage = (viewsSlider && viewsSlider.classList.contains('showing-results')) ? 'results' : 'main';
                     if (!window.history.state || window.history.state.page !== nowPage) {
@@ -1647,6 +1671,64 @@
             activeScrubType = null;
         }
 
+        // --- CACHE BRANI (title+artista -> id YouTube / copertina) ---
+        // Persistita in localStorage: quando una playlist (Spotify o altro) viene
+        // riaperta, i brani già risolti in passato vengono riconosciuti subito senza
+        // richiamare YouTube/iTunes. Solo i brani MAI visti prima finiscono in rete.
+        const TRACK_CACHE_KEY = 'youtubette_track_cache';
+        const TRACK_CACHE_MAX = 3000; // oltre questa soglia si scartano le voci più vecchie
+
+        // Chiave normalizzata: minuscolo, spazi compattati, per far combaciare piccole
+        // differenze di maiuscole/spazi tra import diversi dello stesso brano.
+        function trackCacheKey(title, channel) {
+            const norm = s => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+            return `${norm(title)}|||${norm(channel)}`;
+        }
+
+        function loadTrackCache() {
+            try {
+                const raw = JSON.parse(localStorage.getItem(TRACK_CACHE_KEY));
+                return raw && typeof raw === 'object' ? raw : {};
+            } catch (err) {
+                return {};
+            }
+        }
+
+        function saveTrackCache(cache) {
+            try {
+                localStorage.setItem(TRACK_CACHE_KEY, JSON.stringify(cache));
+            } catch (err) {
+                console.warn('Impossibile salvare la cache dei brani:', err);
+            }
+        }
+
+        function getCachedTrack(title, channel) {
+            const cache = loadTrackCache();
+            return cache[trackCacheKey(title, channel)] || null;
+        }
+
+        // Scrive/aggiorna una voce di cache. Il campo `ts` serve solo per la pulizia
+        // delle voci più vecchie quando si supera TRACK_CACHE_MAX.
+        function setCachedTrack(title, channel, { id = null, thumbnail = null } = {}) {
+            if (!title) return;
+            const cache = loadTrackCache();
+            const key = trackCacheKey(title, channel);
+            const existing = cache[key] || {};
+            cache[key] = {
+                id: id || existing.id || null,
+                thumbnail: thumbnail || existing.thumbnail || null,
+                ts: Date.now()
+            };
+
+            const keys = Object.keys(cache);
+            if (keys.length > TRACK_CACHE_MAX) {
+                keys.sort((a, b) => (cache[a].ts || 0) - (cache[b].ts || 0));
+                const toRemove = keys.slice(0, keys.length - TRACK_CACHE_MAX);
+                toRemove.forEach(k => delete cache[k]);
+            }
+            saveTrackCache(cache);
+        }
+
         // --- SETTINGS: "Playlist Recenti" ---
         // Elenco dedicato (separato dai "Recenti" mostrati in home, che mischiano brani e
         // playlist e restano limitati a RECENT_MAX): qui teniamo fino a 9 playlist, mostrate
@@ -2328,15 +2410,23 @@
                     throw new Error('Nessun brano trovato: la playlist potrebbe essere privata, vuota o non più raggiungibile.');
                 }
 
-                appState.tracks = rawTracks.map(t => ({
-                    id: null,
-                    title: t.title,
-                    channel: t.artist,
-                    thumbnail: null,
-                    artworkFetched: false,
-                    resolved: false,
-                    spotifyImport: true
-                }));
+                // Per ogni brano controlliamo subito la cache locale: se lo abbiamo già
+                // risolto in passato (stesso titolo+artista), riusiamo id/copertina senza
+                // toccare la rete. Solo i brani MAI incontrati prima restano "vuoti" e
+                // verranno cercati su iTunes/YouTube come al solito (iTunes al render,
+                // YouTube solo quando l'utente li riproduce davvero).
+                appState.tracks = rawTracks.map(t => {
+                    const cached = getCachedTrack(t.title, t.artist);
+                    return {
+                        id: cached?.id || null,
+                        title: t.title,
+                        channel: t.artist,
+                        thumbnail: cached?.thumbnail || null,
+                        artworkFetched: !!(cached?.thumbnail || cached?.id),
+                        resolved: !!cached?.id,
+                        spotifyImport: true
+                    };
+                });
                 appState.currentIndex = -1;
 
                 if (resultsStatusText) resultsStatusText.classList.add('hidden');
@@ -2378,6 +2468,10 @@
                     track.thumbnail = artwork;
                     const img = document.getElementById(`track-img-${index}`);
                     if (img) img.src = artwork;
+                    // Salva in cache: la prossima volta che questo brano compare in una
+                    // playlist (anche diversa), la copertina è già pronta senza rifare
+                    // la chiamata a iTunes.
+                    setCachedTrack(track.title, track.channel, { thumbnail: artwork });
                 }
             } catch (err) {
                 console.warn('Impossibile recuperare copertina da iTunes:', err);
@@ -2431,6 +2525,10 @@
                 }
                 const badge = img?.parentElement?.querySelector('.fa-spotify');
                 if (badge) badge.remove();
+
+                // Salva in cache: se questo brano ricompare (stessa o altra playlist),
+                // il prossimo avvio lo riprodurrà subito senza rifare la ricerca YouTube.
+                setCachedTrack(track.title, track.channel, { id: track.id, thumbnail: track.thumbnail });
 
                 return true;
             } catch (err) {
