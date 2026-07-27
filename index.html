@@ -600,8 +600,14 @@
             <div class="flex-1 flex items-center justify-center my-auto relative">
                 <div class="relative w-72 h-72 md:w-80 md:h-80 flex items-center justify-center">
                     <div id="sheetArtworkGlow" class="absolute inset-0 rounded-[22%] blur-2xl opacity-0 transition-opacity duration-500 bg-[var(--accent)]"></div>
-                    <div class="w-full h-full rounded-[22%] overflow-hidden artwork-placeholder shadow-[0_20px_50px_rgba(0,0,0,0.7)] z-10 flex items-center justify-center">
-                        <img id="sheetArtworkImg" class="w-full h-full object-cover" alt="">
+                    <!-- L'ombra sta su questo livello, SENZA overflow-hidden: se overflow-hidden e
+                         box-shadow stanno sullo stesso elemento con angoli arrotondati, Chrome su
+                         Android disegna una sottile riga chiara dove ritaglia la propria ombra
+                         (l'artefatto segnalato). Separando i due livelli il problema sparisce. -->
+                    <div class="w-full h-full rounded-[22%] shadow-[0_20px_50px_rgba(0,0,0,0.7)] z-10">
+                        <div class="w-full h-full rounded-[22%] overflow-hidden artwork-placeholder flex items-center justify-center">
+                            <img id="sheetArtworkImg" class="w-full h-full object-cover" alt="">
+                        </div>
                     </div>
                 </div>
             </div>
