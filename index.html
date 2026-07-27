@@ -338,8 +338,18 @@
         .search-pill .filter-btn { color:#4a4550; font-size:15px; flex:0 0 auto; display:flex; align-items:center; padding:2px; width:auto !important; opacity:1 !important; background:none !important; }
         .search-pill .filter-btn.active { color:#B8791F; }
 
-        .filter-drop { margin-top:10px; background:var(--bg-card); border-radius:18px; padding:14px; border:1px solid var(--hair, rgba(243,239,230,0.08)); }
-        .filter-drop.hidden { display:none; }
+        .filter-drop {
+            background:var(--bg-card); border-radius:18px; border:1px solid var(--hair, rgba(243,239,230,0.08));
+            max-height:0; opacity:0; overflow:hidden; margin-top:0; padding:0 14px;
+            transform: translateY(-10px);
+            pointer-events:none;
+            transition: max-height 0.38s cubic-bezier(0.16,1,0.3,1), opacity 0.28s ease,
+                        transform 0.38s cubic-bezier(0.16,1,0.3,1), margin-top 0.38s cubic-bezier(0.16,1,0.3,1),
+                        padding 0.38s cubic-bezier(0.16,1,0.3,1);
+        }
+        .filter-drop.open {
+            max-height:240px; opacity:1; margin-top:10px; padding:14px; transform:translateY(0); pointer-events:auto;
+        }
 
         /* ================= HEADER: results (freccia indietro + titolo) ================= */
         .results-header { display:none; align-items:center; gap:14px; padding:6px 8px 0; height:40px; }
@@ -400,7 +410,7 @@
             </div>
 
             <!-- Pannello Filtri YouTube -->
-            <div id="filterMenu" class="filter-drop hidden">
+            <div id="filterMenu" class="filter-drop">
                 <div class="grid grid-cols-2 gap-4">
                     <!-- Colonna Data di Caricamento -->
                     <div class="relative">
@@ -551,9 +561,9 @@
 
             <!-- Area Controlli Inferiore -->
             <div class="w-full max-w-sm mx-auto shrink-0 pointer-events-auto">
-                <div class="w-full text-center mb-5">
+                <div class="w-full text-left mb-5">
                     <div id="swipeTitleContainer" class="w-full py-1 cursor-grab active:cursor-grabbing select-none" style="touch-action: none;">
-                        <div class="marquee-wrapper mx-auto max-w-xs">
+                        <div class="marquee-wrapper">
                             <div id="marqueeContent" class="marquee-content font-bold">
                                 <span id="playerTrackTitle" class="text-[26px] font-bold text-[var(--text-main)]">Nessun Brano</span>
                             </div>
@@ -818,8 +828,8 @@
                     nowPlayingSheet.style.transform = '';
                     handled = true;
                 }
-                if (filterMenu && !filterMenu.classList.contains('hidden')) {
-                    filterMenu.classList.add('hidden');
+                if (filterMenu && filterMenu.classList.contains('open')) {
+                    filterMenu.classList.remove('open');
                     handled = true;
                 }
                 const apiModal = document.getElementById('apiModal');
@@ -899,7 +909,7 @@
             });
 
             function closeSearch() {
-                filterMenu.classList.add('hidden');
+                filterMenu.classList.remove('open');
             }
 
             // La stessa barra di ricerca serve sia per cercare su YouTube (testo libero)
@@ -919,7 +929,7 @@
             // Click sul pulsante Filtri YouTube (interno alla barra)
             filterToggleBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                filterMenu.classList.toggle('hidden');
+                filterMenu.classList.toggle('open');
             });
 
             miniPlayer.addEventListener('click', (e) => {
@@ -2209,8 +2219,6 @@
             if (appState.currentIndex !== -1 && appState.currentIndex !== index) {
                 const oldRow = document.getElementById(`track-row-${appState.currentIndex}`);
                 if (oldRow) {
-                    oldRow.classList.remove('bg-white/10', 'border-white/10');
-                    oldRow.classList.add('border-transparent');
                     const oldText = oldRow.querySelector('p.text-sm');
                     if (oldText) { oldText.classList.remove('custom-text-accent', 'font-black'); oldText.classList.add('text-white'); }
                 }
@@ -2254,8 +2262,6 @@
 
             const newRow = document.getElementById(`track-row-${index}`);
             if (newRow) {
-                newRow.classList.remove('border-transparent');
-                newRow.classList.add('bg-white/10', 'border-white/10');
                 const newText = newRow.querySelector('p.text-sm');
                 if (newText) { newText.classList.remove('text-white'); newText.classList.add('custom-text-accent', 'font-black'); }
                 newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
