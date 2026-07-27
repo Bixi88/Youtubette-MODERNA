@@ -130,21 +130,6 @@
             animation: trackRowIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
 
-        .ambient-bg {
-            position: absolute;
-            inset: 0;
-            z-index: 0;
-            opacity: 0.35;
-            filter: blur(80px);
-            transform: scale(1.2);
-            pointer-events: none;
-            /* background-image non è animabile via CSS: il crossfade vero è gestito
-               via JS transitionando l'opacity mentre si cambia l'immagine sotto. */
-            transition: opacity 0.35s ease;
-            background-position: center;
-            background-size: cover;
-        }
-
         /* Mini Player: Vetro satinato dinamico perfettamente integrato con l'estetica dell'app */
         .glass-panel {
             background: var(--bg-card);
@@ -388,8 +373,6 @@
 </head>
 <body class="flex flex-col justify-between hidden p-4 box-border h-full custom-bg-main relative">
 
-    <div id="globalAmbientBg" class="ambient-bg ambient-hideable"></div>
-
     <header class="shrink-0 z-40 relative">
         <!-- HEADER HOME: menu impostazioni + titolo + pillola di ricerca -->
         <div class="home-header" id="homeHeader">
@@ -515,7 +498,7 @@
             </div>
 
             <div class="flex items-center space-x-1 shrink-0" id="miniPlayerControls">
-                <button id="miniPlayPauseBtn" class="w-[38px] h-[38px] rounded-full flex items-center justify-center text-[15px] shadow-md bg-white text-black transition-transform">
+                <button id="miniPlayPauseBtn" class="w-[38px] h-[38px] rounded-full flex items-center justify-center text-[15px] shadow-md custom-bg-accent transition-transform" style="color:#1a1305;">
                     <i class="fa-solid fa-play ml-0.5" id="miniPlayIcon"></i>
                 </button>
             </div>
@@ -532,11 +515,10 @@
     </div>
 
     <!-- Now Playing Sheet -->
-    <div id="nowPlayingSheet" class="flex flex-col select-none">
-        <div id="sheetAmbientBg" class="ambient-hideable absolute inset-0 z-0 opacity-60 transition-all duration-1000 bg-cover bg-center scale-105 blur-md"></div>
-        <div class="absolute inset-0 z-1 bg-gradient-to-b from-black/25 via-black/50 to-[var(--bg-main)]"></div>
+    <div id="nowPlayingSheet" class="flex flex-col select-none custom-bg-main">
 
         <div id="sheetSwipeCloseArea" class="absolute inset-x-0 top-0 z-10 cursor-grab active:cursor-grabbing" style="touch-action: none; bottom: 310px;"></div>
+
 
         <div class="relative z-20 flex flex-col h-full px-6 pb-8 pt-4 justify-between pointer-events-none">
             <div id="sheetHeaderDrag" class="w-full flex flex-col items-center py-2 shrink-0 cursor-pointer pointer-events-auto">
@@ -590,7 +572,7 @@
 
                 <div class="flex items-center justify-between px-6 mb-8">
                     <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step"></i></button>
-                    <button id="playPauseBtn" class="w-[68px] h-[68px] rounded-full flex items-center justify-center text-[24px] shadow-2xl bg-white text-black">
+                    <button id="playPauseBtn" class="w-[68px] h-[68px] rounded-full flex items-center justify-center text-[24px] shadow-2xl custom-bg-accent" style="color:#1a1305;">
                         <i class="fa-solid fa-play ml-1" id="playIcon"></i>
                     </button>
                     <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-forward-step"></i></button>
@@ -654,8 +636,6 @@
         const miniPlayerDetails = document.getElementById('miniPlayerDetails');
         const miniTextContainer = document.getElementById('miniTextContainer');
         const closeSheetBtn = document.getElementById('closeSheetBtn');
-        const globalAmbientBg = document.getElementById('globalAmbientBg');
-        const sheetAmbientBg = document.getElementById('sheetAmbientBg');
         const sheetSwipeCloseArea = document.getElementById('sheetSwipeCloseArea');
         const trackList = document.getElementById('trackList');
 
@@ -794,43 +774,6 @@
                 nextTrack();
             }
             // BUFFERING (3), UNSTARTED (-1), CUED (5): nessuna modifica all'icona.
-        }
-
-        // --- GESTIONE COPERTINE: CROSSFADE DIRETTO TRA DUE LAYER SOVRAPPOSTI ---
-        // Invece di portare l'unico layer a opacità 0 (che mostra il nero sottostante) e poi
-        // farlo tornare su con la nuova immagine, teniamo due layer identici impilati e li
-        // dissolviamo l'uno nell'altro simultaneamente: non c'è mai un istante "vuoto".
-        function setAmbientBackground(el, url) {
-            if (!el || !url) return;
-            if (el.dataset.currentBg === url) return; // stessa immagine, nessun crossfade necessario
-            el.dataset.currentBg = url;
-
-            if (!el._marqueeBgState) {
-                const targetOpacity = getComputedStyle(el).opacity;
-                const twin = el.cloneNode(false);
-                twin.removeAttribute('id');
-                twin.style.opacity = '0';
-                twin.style.transition = 'opacity 0.6s ease';
-                el.style.transition = 'opacity 0.6s ease';
-                el.after(twin);
-                el._marqueeBgState = { targetOpacity, layers: [el, twin], activeIndex: 0 };
-            }
-
-            const state = el._marqueeBgState;
-            const nextIndex = state.activeIndex === 0 ? 1 : 0;
-            const incoming = state.layers[nextIndex];
-            const outgoing = state.layers[state.activeIndex];
-
-            incoming.style.backgroundImage = `url(${url})`;
-            incoming.style.backgroundPosition = 'center';
-            incoming.style.backgroundSize = 'cover';
-
-            requestAnimationFrame(() => {
-                incoming.style.opacity = state.targetOpacity;
-                outgoing.style.opacity = '0';
-            });
-
-            state.activeIndex = nextIndex;
         }
 
         function displayArtwork(imgElement, videoId) {
@@ -2267,9 +2210,6 @@
             const channelEl = document.getElementById('playerTrackChannel');
             if (titleEl) titleEl.innerText = track.title;
             if (channelEl) channelEl.innerText = track.channel;
-
-            if (globalAmbientBg) setAmbientBackground(globalAmbientBg, track.thumbnail);
-            if (sheetAmbientBg) setAmbientBackground(sheetAmbientBg, track.thumbnail);
 
             const sheetImg = document.getElementById('sheetArtworkImg');
             const miniImg = document.getElementById('miniPlayerImg');
