@@ -196,6 +196,8 @@
             position: relative;
             width: 100%;
             overflow: hidden;
+        }
+        .marquee-wrapper.fade-edges {
             mask-image: linear-gradient(to right, transparent, #fff 6%, #fff 94%, transparent);
             -webkit-mask-image: linear-gradient(to right, transparent, #fff 6%, #fff 94%, transparent);
         }
@@ -1581,14 +1583,14 @@
 
         // Aggiunge (o riporta in cima, se già presente) una voce alla cache Recenti.
         // type: 'song' per una ricerca YouTube, 'playlist' per un import Spotify.
-        function addRecentItem({ name, type, query = null, url = null, artwork = null }) {
+        function addRecentItem({ name, type, query = null, url = null, artwork = null, track = null }) {
             if (!name) return;
             let items = loadRecentItems();
             items = items.filter(it => {
                 if (it.type !== type) return true;
                 return type === 'playlist' ? it.url !== url : it.query !== query;
             });
-            items.unshift({ name, type, query, url, artwork, ts: Date.now() });
+            items.unshift({ name, type, query, url, artwork, track, ts: Date.now() });
             items = items.slice(0, RECENT_MAX);
             saveRecentItems(items);
             renderRecentHome();
@@ -1630,7 +1632,16 @@
             if (!item) return;
             if (item.type === 'playlist' && item.url) {
                 importSpotifyPlaylist(item.url);
+            } else if (item.type === 'song' && item.track) {
+                currentListSource = 'youtube';
+                appState.tracks = [item.track];
+                nextSearchPageToken = '';
+                toggleDownloadButtons(true);
+                loadTrack(0);
+                openNowPlayingSheet();
             } else if (item.query) {
+                // Voci "Recenti" più vecchie, salvate prima che venisse memorizzato anche il
+                // brano: in mancanza del brano completo, ripieghiamo sulla ricerca come prima.
                 searchInput.value = item.query;
                 performSearch(false);
             }
@@ -1736,6 +1747,9 @@
                 const gap = "<span class='inline-block w-16'></span>";
                 miniContent.innerHTML = cleanText + gap + cleanText + gap;
                 miniContent.classList.add('animate-marquee');
+                miniWrapper.classList.add('fade-edges');
+            } else {
+                miniWrapper.classList.remove('fade-edges');
             }
         }
 
@@ -1755,6 +1769,9 @@
                 const gap = "<span class='inline-block w-16'></span>";
                 marqueeContent.innerHTML = cleanText + gap + cleanText + gap;
                 marqueeContent.classList.add('animate-marquee');
+                if (wrapper) wrapper.classList.add('fade-edges');
+            } else if (wrapper) {
+                wrapper.classList.remove('fade-edges');
             }
         }
 
@@ -1841,7 +1858,7 @@
                 renderTracklist(isLoadMore ? previousCount : 0);
 
                 if (!isLoadMore && newTracks.length > 0) {
-                    addRecentItem({ name: query, type: 'song', query, artwork: newTracks[0].thumbnail });
+                    addRecentItem({ name: query, type: 'song', query, artwork: newTracks[0].thumbnail, track: newTracks[0] });
                 }
             } catch (error) {
                 showVisualApiError();
