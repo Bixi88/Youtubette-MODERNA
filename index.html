@@ -139,15 +139,8 @@
             box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
         }
 
-        /* Placeholder dell'artwork "In Riproduzione" prima che l'immagine venga caricata:
-           nero puro, identico allo sfondo AMOLED dell'app. Prima era un grigio scuro
-           (#15121A): contro il nero puro dello sfondo, quel salto di contrasto sugli
-           angoli arrotondati generava una sottile riga chiara visibile (accentuata dalla
-           compressione JPEG degli screenshot). Con lo stesso nero non c'è più bordo
-           percepibile, la forma resta definita solo dall'ombra del contenitore esterno. */
-        .artwork-placeholder {
-            background-color: #000000;
-        }
+        /* (Placeholder dell'artwork rimosso su richiesta: ora, prima del caricamento,
+           non c'è alcun elemento visibile al posto della copertina.) */
 
         #nowPlayingSheet {
             position: fixed;
@@ -597,16 +590,11 @@
             <div class="flex-1 flex items-center justify-center my-auto relative">
                 <div class="relative w-72 h-72 md:w-80 md:h-80 flex items-center justify-center">
                     <div id="sheetArtworkGlow" class="absolute inset-0 rounded-[22%] blur-2xl opacity-0 transition-opacity duration-500 bg-[var(--accent)]"></div>
-                    <!-- L'ombra sta su questo livello, SENZA overflow-hidden: se overflow-hidden e
-                         box-shadow stanno sullo stesso elemento con angoli arrotondati, Chrome su
-                         Android disegna una sottile riga chiara dove ritaglia la propria ombra
-                         (l'artefatto segnalato). Separando i due livelli il problema sparisce. -->
-                    <div class="w-full h-full rounded-[22%] shadow-[0_20px_50px_rgba(0,0,0,0.7)] z-10">
-                        <div class="relative w-full h-full rounded-[22%] overflow-hidden artwork-placeholder flex items-center justify-center">
-                            <i class="fa-solid fa-music text-4xl opacity-15" id="sheetArtworkPlaceholderIcon"></i>
-                            <img id="sheetArtworkImg" class="w-full h-full object-cover absolute inset-0" alt="">
-                        </div>
-                    </div>
+                    <!-- Nessun placeholder/squircle: l'immagine è invisibile (opacity-0) finché
+                         non è caricata con successo, poi appare direttamente con la sua ombra e
+                         i suoi angoli arrotondati. Prima del caricamento non c'è alcun elemento
+                         visibile al suo posto. -->
+                    <img id="sheetArtworkImg" class="w-full h-full object-cover rounded-[22%] shadow-[0_20px_50px_rgba(0,0,0,0.7)] opacity-0 transition-opacity duration-300" alt="">
                 </div>
             </div>
 
@@ -712,17 +700,18 @@
         // il caricamento non va a buon fine, così sopra il placeholder grigio non compare mai.
         const sheetArtworkImgEl = document.getElementById('sheetArtworkImg');
         const sheetArtworkGlowEl = document.getElementById('sheetArtworkGlow');
-        const sheetArtworkPlaceholderIconEl = document.getElementById('sheetArtworkPlaceholderIcon');
         if (sheetArtworkImgEl && sheetArtworkGlowEl) {
             sheetArtworkImgEl.addEventListener('load', () => {
+                sheetArtworkImgEl.classList.remove('opacity-0');
+                sheetArtworkImgEl.classList.add('opacity-100');
                 sheetArtworkGlowEl.classList.remove('opacity-0');
                 sheetArtworkGlowEl.classList.add('opacity-20');
-                if (sheetArtworkPlaceholderIconEl) sheetArtworkPlaceholderIconEl.classList.add('hidden');
             });
             sheetArtworkImgEl.addEventListener('error', () => {
+                sheetArtworkImgEl.classList.remove('opacity-100');
+                sheetArtworkImgEl.classList.add('opacity-0');
                 sheetArtworkGlowEl.classList.remove('opacity-20');
                 sheetArtworkGlowEl.classList.add('opacity-0');
-                if (sheetArtworkPlaceholderIconEl) sheetArtworkPlaceholderIconEl.classList.remove('hidden');
             });
         }
         const miniPlayerDetails = document.getElementById('miniPlayerDetails');
