@@ -39,6 +39,14 @@
             background-color: var(--bg-main);
             color: var(--text-main);
         }
+
+        /* Fallback locale per .hidden: Tailwind è caricato da CDN esterno e la sua
+           utility .hidden{display:none} arriva solo dopo che lo script si scarica ed
+           esegue. Nel frattempo elementi come il pulsante "aggiorna app" (nascosto di
+           default via class="hidden") restavano visibili, dando l'impressione che
+           comparisse sempre. Definendola già qui, subito, non dipende più dai tempi
+           del CDN. */
+        .hidden { display: none !important; }
     </style>
 
     <link rel="manifest" href="manifest.json">
@@ -188,63 +196,16 @@
             transition: none;
         }
 
-        /* --- STRUTTURA DINAMICA BARRA DI RICERCA --- */
-        .search-container {
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            flex: 1;
-            margin-left: 1rem;
-            height: 40px;
-        }
-        #searchInput {
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            appearance: none;
-            color-scheme: dark;
-            width: 0px;
-            opacity: 0;
-            pointer-events: none;
-            transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease, padding 0.3s ease;
-            background: rgba(255, 255, 255, 0.08);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            height: 40px;
-            border-radius: 9999px;
-        }
-        .search-container.active #searchInput {
-            width: 100%;
-            opacity: 1;
-            pointer-events: auto;
-            padding-left: 1rem;
-            padding-right: 4.75rem; /* 76px: spazio esatto per non sovrapporsi alle due icone a destra */
-        }
-
-        /* Pulsanti interni alla barra (Filtri + Invio) */
-        .search-buttons {
-            position: absolute;
-            right: 4px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        /* Transizione d'apparizione per il pulsante Filtri */
-        #filterToggleBtn {
-            width: 0px;
-            opacity: 0;
-            pointer-events: none;
-            transform: scale(0.8);
-            transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease, transform 0.25s ease;
-        }
-        .search-container.active #filterToggleBtn {
-            width: 32px;
-            opacity: 1;
-            pointer-events: auto;
-            transform: scale(1);
-        }
+        /* NOTA: qui prima esisteva un intero blocco CSS ("STRUTTURA DINAMICA BARRA DI
+           RICERCA") ereditato dalla vecchia barra di ricerca a comparsa, con classe
+           .search-container. Con il nuovo header stile mockup la barra è invece
+           .search-pill (sempre visibile, niente animazione di comparsa) e quella
+           classe non esiste più nel markup: la regola `.search-container.active
+           #searchInput { pointer-events: auto; }` non scattava MAI, quindi
+           #searchInput restava con `pointer-events: none` per sempre (impostato da
+           quella stessa vecchia regola) e la tastiera non si apriva mai al tap.
+           Blocco rimosso: lo stile reale della barra è più sotto, sotto
+           ".search-pill". */
 
         .marquee-wrapper {
             position: relative;
@@ -449,7 +410,7 @@
                 <input type="text" id="searchInput" placeholder="Cosa vuoi ascoltare oggi?"
                     autocomplete="off" autocorrect="off" spellcheck="false">
                 <button id="filterToggleBtn" class="filter-btn" title="Filtri">
-                    <i class="fa-solid fa-sliders"></i>
+                    <i class="fa-solid fa-filter"></i>
                 </button>
             </div>
 
