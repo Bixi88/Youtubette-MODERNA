@@ -139,6 +139,13 @@
             box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
         }
 
+        /* Placeholder dell'artwork "In Riproduzione" prima che l'immagine venga caricata:
+           grigio piatto (stessa tinta del miniplayer, ma senza trasparenza/blur/bordo,
+           così resta identico anche sopra sfondi diversi), nessuna riga bianca. */
+        .artwork-placeholder {
+            background-color: #15121A;
+        }
+
         #nowPlayingSheet {
             position: fixed;
             top: 100%;
@@ -592,8 +599,8 @@
             <!-- Artwork Rotondo -->
             <div class="flex-1 flex items-center justify-center my-auto relative">
                 <div class="relative w-72 h-72 md:w-80 md:h-80 flex items-center justify-center">
-                    <div class="absolute inset-0 rounded-[22%] blur-2xl opacity-20 transition-all duration-500 bg-[var(--accent)]"></div>
-                    <div class="w-full h-full rounded-[22%] overflow-hidden border-2 border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.7)] z-10 flex items-center justify-center">
+                    <div id="sheetArtworkGlow" class="absolute inset-0 rounded-[22%] blur-2xl opacity-0 transition-opacity duration-500 bg-[var(--accent)]"></div>
+                    <div class="w-full h-full rounded-[22%] overflow-hidden artwork-placeholder shadow-[0_20px_50px_rgba(0,0,0,0.7)] z-10 flex items-center justify-center">
                         <img id="sheetArtworkImg" src="" class="w-full h-full object-cover" alt="">
                     </div>
                 </div>
@@ -697,6 +704,22 @@
         
         const nowPlayingSheet = document.getElementById('nowPlayingSheet');
         const miniPlayer = document.getElementById('miniPlayer');
+
+        // L'alone ambra sfocato dietro l'artwork va mostrato solo quando c'è davvero
+        // un'immagine caricata: appena assegnato un nuovo src resta comunque spento finché
+        // il caricamento non va a buon fine, così sopra il placeholder grigio non compare mai.
+        const sheetArtworkImgEl = document.getElementById('sheetArtworkImg');
+        const sheetArtworkGlowEl = document.getElementById('sheetArtworkGlow');
+        if (sheetArtworkImgEl && sheetArtworkGlowEl) {
+            sheetArtworkImgEl.addEventListener('load', () => {
+                sheetArtworkGlowEl.classList.remove('opacity-0');
+                sheetArtworkGlowEl.classList.add('opacity-20');
+            });
+            sheetArtworkImgEl.addEventListener('error', () => {
+                sheetArtworkGlowEl.classList.remove('opacity-20');
+                sheetArtworkGlowEl.classList.add('opacity-0');
+            });
+        }
         const miniPlayerDetails = document.getElementById('miniPlayerDetails');
         const miniTextContainer = document.getElementById('miniTextContainer');
         const closeSheetBtn = document.getElementById('closeSheetBtn');
