@@ -1,0 +1,2981 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="color-scheme" content="dark">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>YouTubette - Player</title>
+
+    <!-- Stile critico: definito PRIMA di script/link esterni (Tailwind CDN, Font Awesome)
+         apposta. Quelle risorse bloccano il parsing della pagina finché non vengono
+         scaricate dalla rete, e se lo sfondo scuro fosse dichiarato dopo di loro, durante
+         quell'attesa il browser mostrerebbe il grigio di default invece del nero dell'app
+         (il flash grigio segnalato all'apertura/back). Messo qui, viene applicato subito. -->
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg-main: #0a0a0a;
+            --bg-card: rgba(18, 18, 18, 0.4);
+            --bg-input: rgba(26, 26, 26, 0.6);
+            --accent: #1DB954;
+            --text-main: #ffffff;
+            --text-muted: #a3a3a3;
+            --is-light: 0;
+        }
+
+        html, body {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+    </style>
+
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="192x192.png" type="image/png">
+    <link rel="apple-touch-icon" href="192x192.png">
+    
+    <!-- Meta Theme Color multipli per Firefox ed Android -->
+    <meta name="theme-color" content="#0a0a0a" id="metaThemeColor">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0a">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-menu-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="YouTubette">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        * {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+            tap-highlight-color: rgba(0,0,0,0) !important;
+        }
+        button, a, [role="button"], i {
+            -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            outline: none !important;
+            touch-action: manipulation;
+        }
+        #playPauseBtn, #miniPlayPauseBtn {
+            -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+            outline: none !important;
+            box-shadow: none;
+        }
+        #playPauseBtn:focus, #playPauseBtn:active,
+        #miniPlayPauseBtn:focus, #miniPlayPauseBtn:active {
+            outline: none !important;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5) !important;
+        }
+        ::-webkit-scrollbar {
+            display: none;
+            width: 0px;
+            background: transparent;
+        }
+
+        /* --- SLIDER TRA VISTA PLAYLIST E VISTA LISTA CANZONI --- */
+        #viewsSlider {
+            width: 200%;
+            transform: translateX(0%);
+            transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+            will-change: transform;
+        }
+        #viewsSlider.showing-results {
+            transform: translateX(-50%);
+        }
+        #homeView, #resultsView {
+            width: 50%;
+        }
+        /* --- FADE SFUMATO DELLA LISTA CANZONI (alto: sotto la barra menu/ricerca) --- */
+        #resultsView {
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 100%);
+            mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 100%);
+        }
+        /* --- FADE-IN A CASCATA DEI BRANI (dall'alto verso il basso) --- */
+        @keyframes trackRowIn {
+            from { opacity: 0; transform: translateY(-14px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .track-row-enter {
+            animation: trackRowIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        #backToHomeBtn {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        #backToHomeBtn.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        #menuButtonsGroup {
+            transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #menuButtonsGroup.shift-right {
+            transform: translateX(48px);
+        }
+        /* headerLeftGroup deve riservare davvero lo spazio dello spostamento del
+           menuButtonsGroup (che è solo un transform visivo, non incide sul layout flex),
+           altrimenti la search-container che segue parte troppo presto e viene
+           sovrapposta dall'icona spostata. */
+        #headerLeftGroup {
+            transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        #headerLeftGroup.shift-right {
+            width: 88px; /* 40px pulsante impostazioni + 48px di spostamento */
+        }
+
+        .ambient-bg {
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            opacity: 0.35;
+            filter: blur(80px);
+            transform: scale(1.2);
+            pointer-events: none;
+            /* background-image non è animabile via CSS: il crossfade vero è gestito
+               via JS transitionando l'opacity mentre si cambia l'immagine sotto. */
+            transition: opacity 0.35s ease;
+            background-position: center;
+            background-size: cover;
+        }
+
+        /* Mini Player: Vetro satinato dinamico perfettamente integrato con l'estetica dell'app */
+        .glass-panel {
+            background: var(--bg-card);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5);
+        }
+
+        #nowPlayingSheet {
+            position: fixed;
+            top: 100%;
+            left: 0;
+            right: 0;
+            height: 100%;
+            z-index: 100;
+            transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+            will-change: transform;
+            background-color: var(--bg-main);
+            overflow: hidden;
+        }
+        #nowPlayingSheet.expanded {
+            transform: translateY(-100%);
+        }
+
+        #miniPlayer {
+            transform: translateY(150%);
+            opacity: 0;
+            pointer-events: none;
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+        }
+        #miniPlayer.visible {
+            transform: translateY(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #miniTextContainer {
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            flex: 1;
+            min-width: 0;
+            transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease-out;
+            will-change: transform, opacity;
+        }
+        #miniTextContainer.dragging-active {
+            transition: none;
+        }
+
+        /* --- STRUTTURA DINAMICA BARRA DI RICERCA --- */
+        .search-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            flex: 1;
+            margin-left: 1rem;
+            height: 40px;
+        }
+        #searchInput {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            color-scheme: dark;
+            width: 0px;
+            opacity: 0;
+            pointer-events: none;
+            transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease, padding 0.3s ease;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            height: 40px;
+            border-radius: 9999px;
+        }
+        .search-container.active #searchInput {
+            width: 100%;
+            opacity: 1;
+            pointer-events: auto;
+            padding-left: 1rem;
+            padding-right: 4.75rem; /* 76px: spazio esatto per non sovrapporsi alle due icone a destra */
+        }
+
+        /* Pulsanti interni alla barra (Filtri + Invio) */
+        .search-buttons {
+            position: absolute;
+            right: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Transizione d'apparizione per il pulsante Filtri */
+        #filterToggleBtn {
+            width: 0px;
+            opacity: 0;
+            pointer-events: none;
+            transform: scale(0.8);
+            transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease, transform 0.25s ease;
+        }
+        .search-container.active #filterToggleBtn {
+            width: 32px;
+            opacity: 1;
+            pointer-events: auto;
+            transform: scale(1);
+        }
+
+        .marquee-wrapper {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            mask-image: linear-gradient(to right, transparent, #fff 6%, #fff 94%, transparent);
+            -webkit-mask-image: linear-gradient(to right, transparent, #fff 6%, #fff 94%, transparent);
+        }
+        .marquee-content {
+            display: inline-block;
+            white-space: nowrap;
+            will-change: transform;
+        }
+        .animate-marquee {
+            animation: marqueeLoop 12s linear infinite;
+        }
+        @keyframes marqueeLoop {
+            0% { transform: translate3d(0, 0, 0); }
+            100% { transform: translate3d(-50%, 0, 0); }
+        }
+
+        /* Pulsante Play/Pausa: icona semplice (Font Awesome), nessun hover-scale sul bottone
+           (dimensione fissa identica su Windows e Android). Solo un piccolo "pop" quando lo
+           stato cambia davvero, per dare un minimo di feedback. */
+        @keyframes iconPop {
+            0%   { transform: scale(0.55); }
+            100% { transform: scale(1); }
+        }
+        .icon-pop {
+            display: inline-block;
+            animation: iconPop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        img {
+            -webkit-user-drag: none;
+            user-drag: none;
+            /* Evita che il testo "alt" venga mostrato per una frazione di secondo
+               mentre l'immagine è ancora in caricamento (es. su connessioni lente) */
+            color: transparent;
+            font-size: 0;
+        }
+        .track-thumb-img {
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+        .track-thumb-img.loaded {
+            opacity: 1;
+        }
+
+        .custom-bg-main { background-color: var(--bg-main); }
+        .custom-bg-card { background: var(--bg-card); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+        .custom-bg-input { background-color: var(--bg-input); }
+        .custom-text-accent { color: var(--accent); }
+        .custom-bg-accent { background-color: var(--accent); }
+        .custom-border-accent { border-color: var(--accent); }
+        .custom-text-muted { color: var(--text-muted); }
+
+        /* --- CUSTOM SELECT ESTETICI PER IL MENU IMPOSTAZIONI --- */
+        .custom-select-wrapper {
+            position: relative;
+            user-select: none;
+        }
+        .custom-select-trigger {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+        .custom-options {
+            position: absolute;
+            top: 105%;
+            left: 0;
+            right: 0;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 110;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.8);
+            display: none;
+            background: #121212 !important;
+        }
+        .custom-options.show {
+            display: block;
+        }
+        .custom-option {
+            cursor: pointer;
+            transition: background 0.2s ease;
+            background: #121212 !important;
+        }
+        .custom-option:hover {
+            background: rgba(255, 255, 255, 0.08) !important;
+        }
+        .custom-option.selected {
+            background: rgba(255, 255, 255, 0.15) !important;
+            font-weight: bold;
+        }
+
+        /* --- STILI FILTRI CUSTOM DI RICERCA --- */
+        .filter-option {
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        .filter-option.selected {
+            background: var(--accent) !important;
+            color: #000000 !important;
+        }
+
+        /* --- STILI MODALITÀ AMOLED --- */
+        body.amoled-active {
+            --bg-main: #000000 !important;
+            --bg-card: #000000 !important;
+            --bg-input: #000000 !important;
+        }
+        body.amoled-active .ambient-bg,
+        body.amoled-active .ambient-hideable {
+            display: none !important;
+            background-image: none !important;
+        }
+        body.amoled-active .glass-panel,
+        body.amoled-active .custom-bg-card,
+        body.amoled-active #filterMenu {
+            background: #000000 !important;
+            border: 1px solid #262626 !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+        body.amoled-active #filterDateOptions,
+        body.amoled-active #filterDurationOptions,
+        body.amoled-active #playlistFilterDateOptions,
+        body.amoled-active #playlistFilterDurationOptions {
+            background: #000000 !important;
+            border-color: #262626 !important;
+        }
+        body.amoled-active #nowPlayingSheet {
+            background-color: #000000 !important;
+        }
+
+        #miniPlayer, #miniPlayer *, #swipeTitleContainer, #swipeTitleContainer * {
+            -webkit-user-drag: none;
+            user-drag: none;
+        }
+
+        /* --- MENU IMPOSTAZIONI: overlay + sheet animati in stile Gemini --- */
+        #apiModal {
+            position: fixed;
+            inset: 0;
+            z-index: 60;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.55);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+        }
+        #apiModal.active {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+            transition: opacity 0.3s ease, visibility 0s linear 0s;
+        }
+        #apiModal .settings-sheet {
+            width: 100%;
+            max-width: 480px;
+            max-height: 50vh;
+            overflow-y: auto;
+            border-radius: 28px 28px 0 0;
+            padding: 14px 24px calc(22px + env(safe-area-inset-bottom, 0px));
+            /* Unica animazione del menu impostazioni: entra/esce orizzontalmente da
+               sinistra verso destra e viceversa (niente più swipe/animazione verticale). */
+            transform: translateX(-100%);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            will-change: transform;
+        }
+        #apiModal.active .settings-sheet {
+            transform: translateX(0);
+        }
+        @media (min-width: 768px) {
+            #apiModal {
+                align-items: center;
+                padding: 16px;
+            }
+            #apiModal .settings-sheet {
+                border-radius: 26px;
+                max-height: 60vh;
+                padding: 24px;
+                transform: translateX(-40px);
+                opacity: 0;
+                transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+            }
+            #apiModal.active .settings-sheet {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        body.amoled-active #apiModal .settings-sheet {
+            background: #000000 !important;
+            border: 1px solid #262626 !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+    </style>
+</head>
+<body class="font-sans flex flex-col justify-between hidden p-4 box-border h-full custom-bg-main relative">
+
+    <div id="globalAmbientBg" class="ambient-bg ambient-hideable"></div>
+
+    <header class="h-16 px-2 flex items-center justify-between shrink-0 z-40 relative">
+        <div class="flex items-center z-50 relative h-10" id="headerLeftGroup">
+            <!-- Pulsante Indietro (fade-in, posizione fissa; il gruppo menu scorre a destra per fargli spazio) -->
+            <button id="backToHomeBtn" class="absolute left-0 top-0 text-white w-10 h-10 rounded-full flex items-center justify-center bg-white/5 active:scale-90" title="Torna alle playlist">
+                <i class="fa-solid fa-arrow-left text-base"></i>
+            </button>
+
+            <div id="menuButtonsGroup" class="flex items-center gap-2">
+                <!-- Pulsante Impostazioni (Menu con tre linette) -->
+                <button id="apiConfigBtn" class="text-white w-10 h-10 rounded-full flex items-center justify-center bg-white/5 active:scale-90 transition-all relative" title="Impostazioni">
+                    <i class="fa-solid fa-equals text-base"></i>
+                    <span id="apiErrorBadge" class="hidden absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-black animate-pulse"></span>
+                </button>
+                
+                <!-- Pulsante Aggiornamento App (Inizialmente nascosto, si accende alla notifica di update) -->
+                <button id="appUpdateBtn" class="hidden text-white w-10 h-10 rounded-full flex items-center justify-center bg-white/5 active:scale-90 transition-all relative" title="Aggiorna App">
+                    <i class="fa-solid fa-arrows-rotate text-base"></i>
+                    <span class="absolute top-1 right-1 w-2.5 h-2.5 bg-[var(--accent)] rounded-full border border-black animate-ping"></span>
+                    <span class="absolute top-1 right-1 w-2.5 h-2.5 bg-[var(--accent)] rounded-full border border-black"></span>
+                </button>
+            </div>
+        </div>
+
+        <div id="headerTitle" class="absolute left-1/2 -translate-x-1/2 pointer-events-none transition-opacity duration-300">
+            <span class="font-black tracking-widest text-white text-xs uppercase">YOUTUBETTE</span>
+        </div>
+        
+        <div class="search-container" id="searchContainer">
+            <input type="text" id="searchInput" placeholder="Cerca canzoni..." 
+                autocomplete="off" autocorrect="off" spellcheck="false"
+                class="text-xs py-2 rounded-full focus:outline-none focus:border-[var(--accent)] text-white">
+            
+            <div class="search-buttons">
+                <!-- Icona filtri YouTube (Sliders) -->
+                <button id="filterToggleBtn" class="text-white h-8 rounded-full flex items-center justify-center hover:bg-white/10" title="Filtri">
+                    <i class="fa-solid fa-sliders text-xs"></i>
+                </button>
+
+                <!-- Bottone invio / attivazione ricerca -->
+                <button id="searchTriggerBtn" class="w-8 h-8 rounded-full flex items-center justify-center bg-white/5 text-white active:scale-90 transition-all" title="Cerca">
+                    <i class="fa-solid fa-magnifying-glass text-xs" id="searchIcon"></i>
+                </button>
+            </div>
+        </div>
+
+        <button id="pwaInstallBtn" class="hidden absolute top-20 right-4 text-black font-bold text-[10px] px-3 py-1 rounded-full active:scale-95 transition-transform custom-bg-accent z-50">
+            <i class="fa-solid fa-download mr-1"></i> Installa
+        </button>
+    </header>
+
+    <!-- Pannello Filtri YouTube (Distanziato di pochissimi pixel - top-[70px]) -->
+    <div id="filterMenu" class="hidden absolute top-[70px] left-4 right-4 border rounded-2xl p-4 shadow-2xl z-50 custom-bg-card border-white/10 transition-all duration-300">
+        <div class="grid grid-cols-2 gap-4">
+            <!-- Colonna Data di Caricamento -->
+            <div class="relative">
+                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5 custom-text-muted">Data di Caricamento</label>
+                <div class="filter-select-wrapper relative" id="filterDateWrapper">
+                    <div id="filterDateTrigger" class="flex items-center justify-between text-xs px-3.5 py-3 rounded-xl bg-white/5 border border-white/5 text-white cursor-pointer select-none">
+                        <span id="filterDateValue">Qualsiasi data</span>
+                        <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
+                    </div>
+                    <div id="filterDateOptions" class="hidden absolute top-[105%] left-0 right-0 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
+                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5 selected font-bold" data-value="any">Qualsiasi data</div>
+                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="hour">Ultima ora</div>
+                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="today">Oggi</div>
+                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="week">Questa settimana</div>
+                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="month">Questo mese</div>
+                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="year">Quest'anno</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Colonna Durata -->
+            <div class="relative">
+                <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5 custom-text-muted">Durata Brano</label>
+                <div class="filter-select-wrapper relative" id="filterDurationWrapper">
+                    <div id="filterDurationTrigger" class="flex items-center justify-between text-xs px-3.5 py-3 rounded-xl bg-white/5 border border-white/5 text-white cursor-pointer select-none">
+                        <span id="filterDurationValue">Qualsiasi durata</span>
+                        <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
+                    </div>
+                    <div id="filterDurationOptions" class="hidden absolute top-[105%] left-0 right-0 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
+                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5 selected font-bold" data-value="any">Qualsiasi durata</div>
+                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="short">Breve (&lt; 4 min)</div>
+                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="medium">Media (4 - 20 min)</div>
+                        <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="long">Lunga (&gt; 20 min)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sezione Principale -->
+    <main class="flex-1 flex flex-col overflow-hidden z-10 relative">
+        <section class="flex-1 flex flex-col overflow-hidden h-full relative">
+            <div id="viewsSlider" class="flex h-full">
+                <!-- VISTA 1: Playlist (Ricerche Rapide) -->
+                <div id="homeView" class="shrink-0 h-full overflow-y-auto pr-0">
+                    <div id="quickSearchHome" class="hidden grid grid-cols-3 gap-x-4 gap-y-7 px-2 pt-4 pb-36"></div>
+                    <p id="placeholderText" class="text-xs p-8 italic text-center mt-12 custom-text-muted">Usa la lente in alto a destra per cercare brani, oppure incolla il link di una playlist Spotify.</p>
+                </div>
+                <!-- VISTA 2: Lista Canzoni (risultati ricerca / playlist aperta) -->
+                <div id="resultsView" class="shrink-0 h-full overflow-y-auto pr-0">
+                    <p id="resultsStatusText" class="hidden text-xs p-8 italic text-center mt-12 custom-text-muted"></p>
+                    <div id="trackList" class="space-y-1 pb-36 px-6"></div>
+                </div>
+            </div>
+        </section>
+
+        <div id="ytPlayerContainer" class="absolute top-0 left-0 w-1 h-1 opacity-0 pointer-events-none"></div>
+    </main>
+
+    <!-- Mini Player -->
+    <div id="miniPlayer" class="fixed bottom-4 left-4 right-4 h-28 rounded-3xl glass-panel shadow-2xl z-40 flex flex-col justify-center p-3 select-none cursor-pointer" style="touch-action: none;">
+        
+        <div id="miniPlayerContent" class="flex items-center justify-between w-full flex-1 min-w-0 mb-0.5">
+            <div class="flex items-center flex-1 min-w-0 mr-4 h-16 overflow-hidden" id="miniPlayerDetails">
+                <div class="w-16 h-16 rounded-full overflow-hidden shadow-md shrink-0 bg-neutral-800 z-10 flex items-center justify-center">
+                    <img id="miniPlayerImg" src="" class="w-full h-full object-cover" alt="" draggable="false">
+                </div>
+                
+                <div class="ml-3 min-w-0 flex-1 h-full flex flex-col justify-center overflow-hidden" id="miniTextContainer">
+                    <div class="marquee-wrapper w-full font-bold" id="miniMarqueeWrapper">
+                        <div class="marquee-content" id="miniMarqueeContent">
+                            <span id="miniPlayerTitle" class="text-sm font-bold text-[var(--text-main)]"></span>
+                        </div>
+                    </div>
+                    <p id="miniPlayerChannel" class="text-xs truncate custom-text-muted mt-1"></p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-1 shrink-0" id="miniPlayerControls">
+                <button id="miniPlayPauseBtn" class="w-14 h-14 rounded-full flex items-center justify-center text-lg shadow-md bg-white text-black transition-transform">
+                    <i class="fa-solid fa-play ml-0.5" id="miniPlayIcon"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between w-full text-[10px] font-mono custom-text-muted px-1" id="miniProgressBarArea">
+            <span id="miniCurrentTime">0:00</span>
+            <div id="miniProgressBarContainer" class="flex-1 mx-3 h-4 flex items-center relative cursor-pointer">
+                <div class="w-full h-[4px] bg-white/10 rounded-full"></div>
+                <div id="miniProgressBar" class="absolute top-1/2 -translate-y-1/2 left-0 h-[4px] w-0 custom-bg-accent rounded-full transition-all duration-100"></div>
+            </div>
+            <span id="miniDurationTime">0:00</span>
+        </div>
+    </div>
+
+    <!-- Now Playing Sheet -->
+    <div id="nowPlayingSheet" class="flex flex-col select-none">
+        <div id="sheetAmbientBg" class="ambient-hideable absolute inset-0 z-0 opacity-60 transition-all duration-1000 bg-cover bg-center scale-105 blur-md"></div>
+        <div class="absolute inset-0 z-1 bg-gradient-to-b from-black/25 via-black/50 to-[var(--bg-main)]"></div>
+
+        <div id="sheetSwipeCloseArea" class="absolute inset-x-0 top-0 z-10 cursor-grab active:cursor-grabbing" style="touch-action: none; bottom: 310px;"></div>
+
+        <div class="relative z-20 flex flex-col h-full px-6 pb-8 pt-4 justify-between pointer-events-none">
+            <div id="sheetHeaderDrag" class="w-full flex flex-col items-center py-2 shrink-0 cursor-pointer pointer-events-auto">
+                <div class="flex items-center justify-between w-full px-1">
+                    <button id="closeSheetBtn" class="text-neutral-300 hover:text-white p-2 text-lg active:scale-90 transition-transform">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-neutral-300">In Riproduzione</span>
+                    <button id="sheetDownloadBtn" class="text-neutral-400 hover:text-[var(--accent)] p-2 text-base opacity-30 cursor-not-allowed" disabled>
+                        <i class="fa-solid fa-arrow-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Artwork Rotondo -->
+            <div class="flex-1 flex items-center justify-center my-auto relative">
+                <div class="relative w-64 h-64 md:w-72 md:h-72 flex items-center justify-center">
+                    <div class="absolute inset-0 rounded-full blur-2xl opacity-20 transition-all duration-500 bg-[var(--accent)]"></div>
+                    <div class="w-full h-full rounded-full overflow-hidden border-2 border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.7)] z-10 flex items-center justify-center">
+                        <img id="sheetArtworkImg" src="" class="w-full h-full object-cover" alt="">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Area Controlli Inferiore -->
+            <div class="w-full max-w-sm mx-auto shrink-0 pointer-events-auto">
+                <div class="w-full text-center mb-5">
+                    <div id="swipeTitleContainer" class="w-full py-1 cursor-grab active:cursor-grabbing select-none" style="touch-action: none;">
+                        <div class="marquee-wrapper mx-auto max-w-xs">
+                            <div id="marqueeContent" class="marquee-content font-bold">
+                                <span id="playerTrackTitle" class="text-lg md:text-xl font-extrabold text-[var(--text-main)]">Nessun Brano</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p id="playerTrackChannel" class="text-xs mt-1 font-semibold custom-text-muted"></p>
+                </div>
+
+                <div class="flex items-center justify-between text-[11px] mb-2 custom-text-muted font-mono px-1">
+                    <span id="currentTime">0:00</span>
+                    <span id="durationTime">0:00</span>
+                </div>
+                
+                <div class="h-5 rounded-full relative cursor-pointer py-1.5 mb-6 group" id="progressBarContainer">
+                    <div class="w-full h-1.5 rounded-full absolute top-1.5 left-0 bg-white/10 transition-all group-hover:h-2"></div>
+                    <div class="h-1.5 rounded-full w-0 absolute top-1.5 left-0 transition-all duration-100 custom-bg-accent group-hover:h-2" id="progressBar"></div>
+                    
+                    <div id="progressTooltip" class="hidden absolute bottom-full mb-2 text-black font-bold text-[10px] px-2 py-1 rounded-lg shadow-xl pointer-events-none transform -translate-x-1/2 z-50 custom-bg-accent">
+                        0:00
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between px-6 mb-8">
+                    <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-xl p-2 active:scale-90"><i class="fa-solid fa-backward-step"></i></button>
+                    <button id="playPauseBtn" class="w-16 h-16 rounded-full flex items-center justify-center text-xl shadow-2xl bg-white text-black">
+                        <i class="fa-solid fa-play ml-1" id="playIcon"></i>
+                    </button>
+                    <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-xl p-2 active:scale-90"><i class="fa-solid fa-forward-step"></i></button>
+                </div>
+
+                <div class="hidden md:flex items-center space-x-3 justify-center custom-text-muted px-4 py-2 bg-white/5 rounded-2xl mb-2">
+                    <i class="fa-solid fa-volume-high text-xs"></i>
+                    <input type="range" id="volumeSlider" min="0" max="100" value="100" 
+                        class="w-full h-1 rounded-full appearance-none cursor-pointer accent-[var(--text-main)] bg-neutral-700">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Impostazioni -->
+    <div id="apiModal">
+        <div class="settings-sheet glass-panel shadow-2xl relative">
+            <h3 class="text-base font-bold mb-5 flex items-center text-[var(--text-main)]">
+                <i class="fa-solid fa-equals mr-2.5 custom-text-accent"></i> Impostazioni
+            </h3>
+            
+            <div class="mb-4 relative">
+                <label class="block text-xs font-bold uppercase tracking-wider mb-2 custom-text-muted">Stile Interfaccia</label>
+                <div class="custom-select-wrapper">
+                    <div id="customSelectTrigger" class="custom-select-trigger w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none custom-bg-input text-white">
+                        <span id="customSelectedValue">Seleziona Tema...</span>
+                        <i class="fa-solid fa-chevron-down text-neutral-400"></i>
+                    </div>
+                    <div id="customSelectOptions" class="custom-options w-full rounded-xl custom-bg-input text-white text-xs"></div>
+                </div>
+            </div>
+
+            <!-- INTERRUTTORE MODALITÀ AMOLED -->
+            <div class="mb-4 flex items-center justify-between border-t border-white/5 pt-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-white">Modalità AMOLED</label>
+                    <span class="text-[9px] custom-text-muted">Spegni gli sfondi e ottimizza i neri</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="amoledToggle" class="sr-only peer">
+                    <div class="w-11 h-6 bg-neutral-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--accent)]"></div>
+                </label>
+            </div>
+
+            <!-- FILTRO PLAYLIST (si applica solo ai cerchi playlist in home) -->
+            <div class="mb-4 border-t border-white/5 pt-4">
+                <label class="block text-xs font-bold uppercase tracking-wider mb-1 custom-text-muted">Filtro Playlist</label>
+                <span class="text-[9px] custom-text-muted block mb-2">Si applica solo alle playlist in home, non alla ricerca in alto</span>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="relative">
+                        <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5 custom-text-muted">Data</label>
+                        <div class="filter-select-wrapper relative" id="playlistFilterDateWrapper">
+                            <div id="playlistFilterDateTrigger" class="flex items-center justify-between text-xs px-3.5 py-3 rounded-xl bg-white/5 border border-white/5 text-white cursor-pointer select-none">
+                                <span id="playlistFilterDateValue">Oggi</span>
+                                <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
+                            </div>
+                            <div id="playlistFilterDateOptions" class="hidden absolute top-[105%] left-0 right-0 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="any">Qualsiasi data</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="hour">Ultima ora</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5 selected font-bold" data-value="today">Oggi</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="week">Questa settimana</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="month">Questo mese</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="year">Quest'anno</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="relative">
+                        <label class="block text-[10px] font-bold uppercase tracking-wider mb-1.5 custom-text-muted">Durata</label>
+                        <div class="filter-select-wrapper relative" id="playlistFilterDurationWrapper">
+                            <div id="playlistFilterDurationTrigger" class="flex items-center justify-between text-xs px-3.5 py-3 rounded-xl bg-white/5 border border-white/5 text-white cursor-pointer select-none">
+                                <span id="playlistFilterDurationValue">Breve (&lt; 4 min)</span>
+                                <i class="fa-solid fa-chevron-down text-[10px] text-neutral-400"></i>
+                            </div>
+                            <div id="playlistFilterDurationOptions" class="hidden absolute top-[105%] left-0 right-0 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="any">Qualsiasi durata</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5 selected font-bold" data-value="short">Breve (&lt; 4 min)</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="medium">Media (4 - 20 min)</div>
+                                <div class="filter-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-value="long">Lunga (&gt; 20 min)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RICERCHE RAPIDE (Scorciatoie in Home) -->
+            <div class="mb-4 border-t border-white/5 pt-4">
+                <label class="block text-xs font-bold uppercase tracking-wider mb-2 custom-text-muted">Ricerche Rapide</label>
+                <div class="space-y-2">
+                    <input type="text" id="quickSearchQueryInput" placeholder="Cosa cercare (es. lofi hip hop)"
+                        autocomplete="off" autocorrect="off" spellcheck="false"
+                        class="w-full text-xs px-4 py-3 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
+                    <input type="text" id="quickSearchNameInput" placeholder="Nome da mostrare (es. Lofi)"
+                        autocomplete="off" autocorrect="off" spellcheck="false"
+                        class="w-full text-xs px-4 py-3 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
+                    <button id="addQuickSearchBtn" class="w-full font-bold text-xs px-4 py-2.5 rounded-xl active:scale-95 transition-all bg-white/10 text-white hover:bg-white/15">
+                        <i class="fa-solid fa-plus mr-1.5"></i> Aggiungi Scorciatoia
+                    </button>
+                </div>
+                <div id="quickSearchManageList" class="space-y-1.5 mt-3 max-h-40 overflow-y-auto pr-0.5"></div>
+            </div>
+
+            <div class="mb-4 border-t border-white/5 pt-4">
+                <div class="flex items-center justify-between mb-2">
+                    <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted">YouTube API Key</label>
+                    <span id="modalApiBadgeError" class="hidden text-[10px] font-bold text-red-500 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full animate-pulse">Chiave Non Valida</span>
+                </div>
+                <input type="text" id="modalApiKeyInput" placeholder="Incolla qui la tua chiave API..." 
+                    class="w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
+            </div>
+
+            <div class="flex items-center justify-end space-x-3 mt-6 border-t border-white/5 pt-4">
+                <button id="modalCancelBtn" class="hover:text-white font-semibold text-xs px-4 py-2 rounded-full transition-colors custom-text-muted">Annulla</button>
+                <button id="modalSaveBtn" class="font-bold text-xs px-5 py-2 rounded-xl active:scale-95 transition-all custom-bg-accent text-black">Salva</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const themes = {
+            spotifyGreen: { name: "Spotify Green", bgMain: "#090909", bgCard: "rgba(18, 18, 18, 0.45)", bgInput: "rgba(28, 28, 28, 0.6)", accent: "#1DB954", textMain: "#ffffff", textMuted: "#a3a3a3", isLight: 0 },
+            synthwave:    { name: "Synthwave Retro", bgMain: "#1a0b2e", bgCard: "rgba(35, 14, 59, 0.45)", bgInput: "rgba(51, 15, 87, 0.6)", accent: "#ff007f", textMain: "#ffffff", textMuted: "#b39ddb", isLight: 0 },
+            amberGold:    { name: "Amber Gold", bgMain: "#120d03", bgCard: "rgba(30, 22, 8, 0.45)", bgInput: "rgba(45, 33, 12, 0.6)", accent: "#ffb300", textMain: "#ffffff", textMuted: "#d7ccc8", isLight: 0 },
+            amoledWhite:  { name: "Pure AMOLED", bgMain: "#000000", bgCard: "rgba(0, 0, 0, 0.5)", bgInput: "rgba(18, 18, 18, 0.6)", accent: "#ffffff", textMain: "#ffffff", textMuted: "#888888", isLight: 0 },
+            cyberPurple:  { name: "Cyber Purple", bgMain: "#07040a", bgCard: "rgba(15, 9, 22, 0.45)", bgInput: "rgba(25, 17, 36, 0.6)", accent: "#bf5af2", textMain: "#ffffff", textMuted: "#9893a5", isLight: 0 },
+            deepBlue:     { name: "Oceanic Depth", bgMain: "#03070d", bgCard: "rgba(8, 16, 28, 0.45)", bgInput: "rgba(16, 30, 51, 0.6)", accent: "#0a84ff", textMain: "#ffffff", textMuted: "#8e9bb4", isLight: 0 },
+            lavaRed:      { name: "Lava Crimson", bgMain: "#0a0404", bgCard: "rgba(18, 9, 9, 0.45)", bgInput: "rgba(30, 17, 17, 0.6)", accent: "#ff453a", textMain: "#ffffff", textMuted: "#aa9999", isLight: 0 },
+            dracula:      { name: "Dracula", bgMain: "#1e1f29", bgCard: "rgba(40, 42, 54, 0.45)", bgInput: "rgba(53, 56, 73, 0.6)", accent: "#ff79c6", textMain: "#f8f8f2", textMuted: "#6272a4", isLight: 0 },
+            nordicIce:    { name: "Nordic Frost", bgMain: "#101419", bgCard: "rgba(23, 30, 38, 0.45)", bgInput: "rgba(36, 47, 59, 0.6)", accent: "#88c0d0", textMain: "#e5e9f0", textMuted: "#81a1c1", isLight: 0 },
+            midnightSun:  { name: "Midnight Sun", bgMain: "#0d0c14", bgCard: "rgba(24, 22, 38, 0.45)", bgInput: "rgba(37, 34, 59, 0.6)", accent: "#ff9f1c", textMain: "#ffffff", textMuted: "#9a8c99", isLight: 0 },
+            emeraldDark:  { name: "Emerald", bgMain: "#050d0a", bgCard: "rgba(10, 28, 21, 0.45)", bgInput: "rgba(16, 45, 33, 0.6)", accent: "#2ecc71", textMain: "#ffffff", textMuted: "#95a5a6", isLight: 0 },
+            tokyoNight:   { name: "Tokyo Night", bgMain: "#0a0d16", bgCard: "rgba(21, 25, 43, 0.45)", bgInput: "rgba(34, 40, 68, 0.6)", accent: "#7aa2f7", textMain: "#acb0d0", textMuted: "#565f89", isLight: 0 },
+            electricLime: { name: "Electric Lime", bgMain: "#080a04", bgCard: "rgba(20, 26, 12, 0.45)", bgInput: "rgba(32, 41, 19, 0.6)", accent: "#a6e22e", textMain: "#ffffff", textMuted: "#a0a39a", isLight: 0 },
+            cherryBlossom:{ name: "Cherry Blossom", bgMain: "#140a0e", bgCard: "rgba(36, 18, 25, 0.45)", bgInput: "rgba(56, 28, 39, 0.6)", accent: "#ffb7c5", textMain: "#ffffff", textMuted: "#e0b0bc", isLight: 0 },
+            cyberpunk2077:{ name: "Cyberpunk 2077", bgMain: "#0a0a03", bgCard: "rgba(31, 31, 10, 0.45)", bgInput: "rgba(48, 48, 15, 0.6)", accent: "#fcee0a", textMain: "#ffffff", textMuted: "#91918a", isLight: 0 }
+        };
+
+        let appState = {
+            apiKey: localStorage.getItem('youtubette_api_key') || '',
+            currentTheme: localStorage.getItem('youtubette_theme') || 'spotifyGreen',
+            isAmoled: localStorage.getItem('youtubette_amoled') === 'true',
+            tracks: [],
+            currentIndex: -1,
+            isPlaying: false,
+            // Filtri della ricerca manuale (barra in alto): parte sempre da "qualsiasi",
+            // sarà l'utente a cambiarli di volta in volta dal pannello filtri.
+            filterDate: 'any',
+            filterDuration: 'any',
+            // Filtri delle playlist (cerchi in home): valori di default fissi (Oggi / Breve),
+            // ma personalizzabili dalle Impostazioni e persistenti tra le sessioni.
+            playlistFilterDate: localStorage.getItem('youtubette_playlist_filter_date') || 'today',
+            playlistFilterDuration: localStorage.getItem('youtubette_playlist_filter_duration') || 'short',
+            quickSearches: JSON.parse(localStorage.getItem('youtubette_quick_searches') || '[]')
+        };
+        let deferredPrompt, nextSearchPageToken = '', isFetchingMore = false;
+        // 'youtube' = lista da ricerca/ricerca rapida (con paginazione YouTube),
+        // 'spotify' = lista importata da una playlist Spotify (brani senza id YouTube
+        // finché non vengono riprodotti la prima volta).
+        let currentListSource = 'youtube';
+        // Vero se la ricerca correntemente mostrata/paginata è stata avviata da una playlist
+        // (cerchio in home) e quindi deve continuare a usare i filtri playlist anche per il
+        // caricamento delle pagine successive, invece di quelli della ricerca manuale.
+        let currentSearchIsQuickSearch = false;
+        let isScrubbing = false; 
+        let scrubPercentage = 0;
+        
+        const nowPlayingSheet = document.getElementById('nowPlayingSheet');
+        const miniPlayer = document.getElementById('miniPlayer');
+        const miniPlayerDetails = document.getElementById('miniPlayerDetails');
+        const miniTextContainer = document.getElementById('miniTextContainer');
+        const closeSheetBtn = document.getElementById('closeSheetBtn');
+        const globalAmbientBg = document.getElementById('globalAmbientBg');
+        const sheetAmbientBg = document.getElementById('sheetAmbientBg');
+        const sheetSwipeCloseArea = document.getElementById('sheetSwipeCloseArea');
+        const trackList = document.getElementById('trackList');
+
+        const searchContainer = document.getElementById('searchContainer');
+        const searchInput = document.getElementById('searchInput');
+        const searchTriggerBtn = document.getElementById('searchTriggerBtn');
+        const searchIcon = document.getElementById('searchIcon');
+        const filterToggleBtn = document.getElementById('filterToggleBtn');
+        const filterMenu = document.getElementById('filterMenu');
+        const headerTitle = document.getElementById('headerTitle');
+
+        const swipeTitle = document.getElementById('swipeTitleContainer');
+        const marqueeContent = document.getElementById('marqueeContent');
+        
+        const progressBarContainer = document.getElementById('progressBarContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressTooltip = document.getElementById('progressTooltip');
+        
+        const miniProgressBarContainer = document.getElementById('miniProgressBarContainer');
+        const miniProgressBar = document.getElementById('miniProgressBar');
+
+        // GESTIONE REGISTRAZIONE ED AGGIORNAMENTO PROTETTO DEL SERVICE WORKER
+        let newWorker;
+        let refreshing = false;
+        // Vero quando l'ultima interazione sul miniplayer è stata un trascinamento (swipe)
+        // e non un semplice tap/click. Il mouse, a differenza del touch, genera comunque
+        // un evento 'click' dopo un mousedown+mousemove+mouseup sullo stesso elemento:
+        // questo flag serve a impedire che quel click "fantasma" apra la sheet.
+        let miniPlayerWasDragged = false;
+
+        // Legge la posizione VERA e attuale della sheet (in % di translateY), qualunque sia lo
+        // stato in cui si trova in quel momento (chiusa, aperta, o a metà di un'altra animazione).
+        // Serve per far sì che ogni nuovo gesto riparta sempre da dove la sheet si trova davvero,
+        // invece di assumere che parta per forza da "chiusa" (0%) o "aperta" (-100%): questo è ciò
+        // che rende la transizione sempre continua e sempre interrompibile in qualsiasi istante.
+        function getSheetCurrentPercentY() {
+            const style = window.getComputedStyle(nowPlayingSheet);
+            const transform = style.transform;
+            if (!transform || transform === 'none') {
+                return nowPlayingSheet.classList.contains('expanded') ? -100 : 0;
+            }
+            const matrixMatch = transform.match(/matrix\(([^)]+)\)/);
+            if (!matrixMatch) return nowPlayingSheet.classList.contains('expanded') ? -100 : 0;
+            const values = matrixMatch[1].split(',').map(v => parseFloat(v.trim()));
+            const translateYpx = values[5] || 0;
+            const height = nowPlayingSheet.offsetHeight || window.innerHeight;
+            return (translateYpx / height) * 100;
+        }
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then((reg) => {
+                    setInterval(() => reg.update(), 60 * 60 * 1000); // Controlla aggiornamenti ogni ora
+
+                    // Se è già presente un SW in attesa
+                    if (reg.waiting) {
+                        newWorker = reg.waiting;
+                        showUpdateBtn();
+                    }
+
+                    // Se viene rilevato un aggiornamento in corso
+                    reg.addEventListener('updatefound', () => {
+                        newWorker = reg.installing;
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed') {
+                                if (navigator.serviceWorker.controller) {
+                                    showUpdateBtn();
+                                }
+                            }
+                        });
+                    });
+                }).catch(err => console.log(err));
+
+                // Ricarica quando il nuovo worker prende il controllo
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (!refreshing) {
+                        window.location.reload();
+                        refreshing = true;
+                    }
+                });
+            });
+        }
+
+        function showUpdateBtn() {
+            const updateBtn = document.getElementById('appUpdateBtn');
+            if (updateBtn) {
+                updateBtn.classList.remove('hidden');
+                updateBtn.classList.add('text-[var(--accent)]', 'bg-[var(--accent)]/10');
+            }
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault(); deferredPrompt = e;
+            if (document.getElementById('pwaInstallBtn')) document.getElementById('pwaInstallBtn').classList.remove('hidden');
+        });
+
+        var tag = document.createElement('script');
+        tag.src = "https://www.youtube.com/iframe_api";
+        document.getElementsByTagName('script')[0].parentNode.insertBefore(tag, document.getElementsByTagName('script')[0]);
+
+        let player;
+        window.onYouTubeIframeAPIReady = function() {
+            player = new YT.Player('ytPlayerContainer', {
+                height: '100%', width: '100%', videoId: '',
+                playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'modestbranding': 1, 'rel': 0 },
+                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
+            });
+        }
+
+        function onPlayerReady(event) {
+            player.setVolume(document.getElementById('volumeSlider')?.value || 100);
+            startProgressLoop();
+            setupMediaSessionHandlers();
+        }
+
+        function onPlayerStateChange(event) {
+            const playIcon = document.getElementById('playIcon');
+            const miniPlayIcon = document.getElementById('miniPlayIcon');
+
+            // Aggiorniamo l'icona SOLO sugli stati "definitivi" (play esplicito / pausa esplicita / fine brano).
+            // Stati transitori come BUFFERING (durante uno scrubbing/seek) o CUED/UNSTARTED (durante il
+            // caricamento di un nuovo video) NON toccano l'icona: così, come su Spotify, il pulsante resta
+            // sul simbolo "pausa" mentre ci si muove dentro la canzone, e torna alla freccia "play" solo
+            // quando l'utente mette effettivamente in pausa.
+            if (event.data == YT.PlayerState.PLAYING) {
+                appState.isPlaying = true;
+                setPlayIconState(true);
+                updateDuration(); 
+                updateMediaSessionState(true);
+            } else if (event.data == YT.PlayerState.PAUSED) {
+                appState.isPlaying = false;
+                setPlayIconState(false);
+                updateMediaSessionState(false);
+            } else if (event.data == YT.PlayerState.ENDED) {
+                appState.isPlaying = false;
+                setPlayIconState(false);
+                updateMediaSessionState(false);
+                nextTrack();
+            }
+            // BUFFERING (3), UNSTARTED (-1), CUED (5): nessuna modifica all'icona.
+        }
+
+        // --- GESTIONE COPERTINE: CROSSFADE DIRETTO TRA DUE LAYER SOVRAPPOSTI ---
+        // Invece di portare l'unico layer a opacità 0 (che mostra il nero sottostante) e poi
+        // farlo tornare su con la nuova immagine, teniamo due layer identici impilati e li
+        // dissolviamo l'uno nell'altro simultaneamente: non c'è mai un istante "vuoto".
+        function setAmbientBackground(el, url) {
+            if (!el || !url) return;
+            if (el.dataset.currentBg === url) return; // stessa immagine, nessun crossfade necessario
+            el.dataset.currentBg = url;
+
+            if (!el._marqueeBgState) {
+                const targetOpacity = getComputedStyle(el).opacity;
+                const twin = el.cloneNode(false);
+                twin.removeAttribute('id');
+                twin.style.opacity = '0';
+                twin.style.transition = 'opacity 0.6s ease';
+                el.style.transition = 'opacity 0.6s ease';
+                el.after(twin);
+                el._marqueeBgState = { targetOpacity, layers: [el, twin], activeIndex: 0 };
+            }
+
+            const state = el._marqueeBgState;
+            const nextIndex = state.activeIndex === 0 ? 1 : 0;
+            const incoming = state.layers[nextIndex];
+            const outgoing = state.layers[state.activeIndex];
+
+            incoming.style.backgroundImage = `url(${url})`;
+            incoming.style.backgroundPosition = 'center';
+            incoming.style.backgroundSize = 'cover';
+
+            requestAnimationFrame(() => {
+                incoming.style.opacity = state.targetOpacity;
+                outgoing.style.opacity = '0';
+            });
+
+            state.activeIndex = nextIndex;
+        }
+
+        function displayArtwork(imgElement, videoId) {
+            if (!imgElement || !videoId) return;
+
+            const maxres = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+            const mq = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+
+            const tempImg = new Image();
+            tempImg.onload = function () {
+                if (this.naturalWidth === 120) {
+                    imgElement.src = mq;
+                } else {
+                    imgElement.src = maxres;
+                }
+            };
+            tempImg.onerror = function () {
+                imgElement.src = mq;
+            };
+            tempImg.src = maxres;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            applyTheme(appState.currentTheme);
+            applyAmoledState(appState.isAmoled);
+            setupCustomSelect();
+            setupFilterDropdowns();
+            setupPlaylistFilterDropdowns();
+            renderQuickSearchHome();
+            renderQuickSearchManageList();
+
+            document.body.classList.remove('hidden');
+            window.history.replaceState({ page: 'main' }, 'Main');
+            
+            window.addEventListener('popstate', (e) => {
+                let handled = false;
+                if (nowPlayingSheet.classList.contains('expanded')) {
+                    nowPlayingSheet.classList.remove('expanded');
+                    nowPlayingSheet.style.transform = '';
+                    handled = true;
+                }
+                if (filterMenu && !filterMenu.classList.contains('hidden')) {
+                    filterMenu.classList.add('hidden');
+                    handled = true;
+                }
+                const apiModal = document.getElementById('apiModal');
+                if (apiModal && apiModal.classList.contains('active')) {
+                    apiModal.classList.remove('active');
+                    handled = true;
+                }
+                // Barra di ricerca aperta (magari con del testo digitato) ma ancora sulla Home,
+                // cioè la ricerca non è stata eseguita: il back la richiude e cancella il testo,
+                // invece di far uscire dall'app o tornare indietro in altro modo.
+                const isShowingResultsForBack = document.getElementById('viewsSlider')?.classList.contains('showing-results');
+                if (!handled && searchContainer.classList.contains('active') && !isShowingResultsForBack) {
+                    searchInput.value = '';
+                    searchContainer.classList.remove('active');
+                    headerTitle.classList.remove('opacity-0');
+                    searchIcon.className = "fa-solid fa-magnifying-glass text-xs";
+                    filterMenu.classList.add('hidden');
+                    handled = true;
+                }
+                // Vista Lista Canzoni: va chiusa (tornando alle playlist) SOLO se il back
+                // stava davvero rimuovendo lo stato 'results' dallo stack, cioè se non è
+                // stato già "consumato" da una chiusura manuale della sheet (swipe) che
+                // aveva già effettuato il proprio history.back() atterrando su 'results'.
+                // In quel caso l'utente deve restare sulla lista canzoni.
+                const viewsSlider = document.getElementById('viewsSlider');
+                const landedPage = e.state && e.state.page;
+                if (!handled && viewsSlider && viewsSlider.classList.contains('showing-results') && landedPage !== 'results') {
+                    showHomeView();
+                    handled = true;
+                }
+                if (handled) {
+                    const nowPage = (viewsSlider && viewsSlider.classList.contains('showing-results')) ? 'results' : 'main';
+                    if (!window.history.state || window.history.state.page !== nowPage) {
+                        window.history.pushState({ page: nowPage }, nowPage === 'results' ? 'Results' : 'Main');
+                    }
+                }
+            });
+
+            // Trigger forza aggiornamento al click sul pulsante
+            document.getElementById('appUpdateBtn')?.addEventListener('click', async (e) => {
+                const btn = e.currentTarget;
+                if (btn.disabled) return;
+                btn.disabled = true;
+                btn.classList.add('opacity-60');
+                const icon = btn.querySelector('i');
+                if (icon) icon.classList.add('fa-spin');
+
+                // Pulisce SOLO la Cache Storage usata dal service worker (asset statici),
+                // così l'app "si accorge" della nuova versione. NON tocca localStorage,
+                // quindi API key, tema e preferenze salvate restano intatte.
+                try {
+                    if (window.caches) {
+                        const cacheKeys = await caches.keys();
+                        await Promise.all(cacheKeys.map(key => caches.delete(key)));
+                    }
+                } catch (err) {
+                    console.warn('Impossibile pulire la cache:', err);
+                }
+
+                if (newWorker) {
+                    // Attiva subito il nuovo service worker: il listener 'controllerchange'
+                    // ricaricherà automaticamente la pagina.
+                    newWorker.postMessage('skipWaiting');
+                } else {
+                    // Fallback: nessun worker in attesa rilevato, forza comunque il reload.
+                    window.location.reload();
+                }
+            });
+
+            // GESTIONE INTEGRATA BARRA DI RICERCA
+            searchTriggerBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!searchContainer.classList.contains('active')) {
+                    searchContainer.classList.add('active');
+                    headerTitle.classList.add('opacity-0');
+                    searchIcon.className = "fa-solid fa-arrow-right text-xs";
+                    searchInput.focus();
+                    window.history.pushState({ page: 'search' }, 'Search');
+                } else {
+                    handleSearchSubmit();
+                }
+            });
+
+            searchInput.addEventListener('keypress', (e) => { 
+                if (e.key === 'Enter') {
+                    handleSearchSubmit();
+                    searchInput.blur();
+                } 
+            });
+
+            document.addEventListener('click', (e) => {
+                if (!searchContainer.contains(e.target) && !filterMenu.contains(e.target)) {
+                    closeSearch();
+                }
+            });
+
+            function closeSearch() {
+                searchContainer.classList.remove('active');
+                headerTitle.classList.remove('opacity-0');
+                searchIcon.className = "fa-solid fa-magnifying-glass text-xs";
+                filterMenu.classList.add('hidden');
+                // Se lo stato 'search' pushato all'apertura è ancora in cima allo stack
+                // (cioè non è stato già consumato dal pulsante indietro), lo rimuoviamo qui.
+                if (window.history.state && window.history.state.page === 'search') {
+                    window.history.back();
+                }
+            }
+
+            // La stessa barra di ricerca serve sia per cercare su YouTube (testo libero)
+            // sia per importare una playlist Spotify (se viene incollato un link/URI playlist).
+            function handleSearchSubmit() {
+                const value = searchInput.value.trim();
+                if (!value) { closeSearch(); return; }
+                if (isSpotifyPlaylistLink(value)) {
+                    importSpotifyPlaylist(value);
+                    searchInput.value = '';
+                    closeSearch();
+                } else {
+                    performSearch(false);
+                }
+            }
+
+            // Click sul pulsante Filtri YouTube (interno alla barra)
+            filterToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                filterMenu.classList.toggle('hidden');
+            });
+
+            miniPlayer.addEventListener('click', (e) => {
+                if (e.target.closest('#miniPlayerControls') || e.target.closest('#miniProgressBarArea')) {
+                    return;
+                }
+                // Il mouse (a differenza del touch) genera comunque un evento 'click' dopo un
+                // mousedown+mousemove+mouseup sullo stesso elemento, anche se in mezzo è avvenuto
+                // uno swipe: se era un trascinamento, ignoriamo il click e non apriamo la sheet.
+                if (miniPlayerWasDragged) {
+                    miniPlayerWasDragged = false;
+                    return;
+                }
+                openNowPlayingSheet();
+            });
+            
+            closeSheetBtn.addEventListener('click', () => {
+                closeNowPlayingSheet();
+            });
+
+            document.getElementById('playPauseBtn').addEventListener('click', togglePlay);
+            document.getElementById('miniPlayPauseBtn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                togglePlay();
+            });
+
+            document.getElementById('prevBtn').addEventListener('click', prevTrack);
+            document.getElementById('nextBtn').addEventListener('click', nextTrack);
+
+            document.getElementById('sheetDownloadBtn').addEventListener('click', redirectToDownload);
+            document.getElementById('volumeSlider')?.addEventListener('input', (e) => player?.setVolume(e.target.value));
+            
+            progressBarContainer.addEventListener('mousedown', startScrub);
+            progressBarContainer.addEventListener('touchstart', startScrub, { passive: false });
+            miniProgressBarContainer.addEventListener('mousedown', startMiniScrub);
+            miniProgressBarContainer.addEventListener('touchstart', startMiniScrub, { passive: false });
+
+            window.addEventListener('mousemove', moveScrubGeneral);
+            window.addEventListener('touchmove', moveScrubGeneral, { passive: false });
+            window.addEventListener('mouseup', endScrubGeneral);
+            window.addEventListener('touchend', endScrubGeneral);
+
+            document.getElementById('apiConfigBtn').addEventListener('click', () => {
+                openApiModal();
+                window.history.pushState({ page: 'modal' }, 'Modal');
+            });
+            document.getElementById('backToHomeBtn').addEventListener('click', () => {
+                showHomeView();
+                window.history.back();
+            });
+
+            // --- SWIPE (destra -> sinistra) SULLA VISTA PLAYLIST PER RIAPRIRE LA LISTA CANZONI ATTIVA ---
+            // Se una playlist/ricerca è già caricata (appState.tracks non vuoto) e siamo
+            // sulla vista Home, uno swipe orizzontale abbastanza deciso riporta alla vista
+            // Risultati senza dover ricliccare la playlist.
+            (function setupHomeViewSwipeBack() {
+                const homeView = document.getElementById('homeView');
+                if (!homeView) return;
+                const SWIPE_THRESHOLD = 60;   // px minimi di spostamento orizzontale
+                const DIRECTION_RATIO = 1.5;  // deve essere chiaramente più orizzontale che verticale
+                let startX = 0, startY = 0, tracking = false;
+
+                homeView.addEventListener('touchstart', (e) => {
+                    const slider = document.getElementById('viewsSlider');
+                    tracking = !!(slider && !slider.classList.contains('showing-results'));
+                    if (!tracking) return;
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                }, { passive: true });
+
+                homeView.addEventListener('touchend', (e) => {
+                    if (!tracking) return;
+                    tracking = false;
+                    const deltaX = e.changedTouches[0].clientX - startX;
+                    const deltaY = e.changedTouches[0].clientY - startY;
+                    if (Math.abs(deltaX) <= Math.abs(deltaY) * DIRECTION_RATIO) return;
+
+                    if (deltaX < -SWIPE_THRESHOLD && appState.tracks.length > 0) {
+                        // Swipe sinistra: riapre la lista canzoni della playlist attiva
+                        showResultsView();
+                    } else if (deltaX > SWIPE_THRESHOLD) {
+                        // Swipe destra: apre il menu impostazioni con animazione da sinistra
+                        const apiModal = document.getElementById('apiModal');
+                        if (apiModal && !apiModal.classList.contains('active')) {
+                            openApiModal();
+                            window.history.pushState({ page: 'modal' }, 'Modal');
+                        }
+                    }
+                }, { passive: true });
+            })();
+
+            // --- SWIPE (sinistra -> destra) SULLA VISTA RISULTATI PER TORNARE ALLE PLAYLIST ---
+            // Stesso comportamento del pulsante "indietro": mostra la vista Home e
+            // consuma lo stato di history, senza toccare appState.tracks (la lista
+            // canzoni resta caricata, pronta per essere riaperta con lo swipe opposto).
+            (function setupResultsViewSwipeBack() {
+                const resultsView = document.getElementById('resultsView');
+                if (!resultsView) return;
+                const SWIPE_THRESHOLD = 60;
+                const DIRECTION_RATIO = 1.5;
+                let startX = 0, startY = 0, tracking = false;
+
+                resultsView.addEventListener('touchstart', (e) => {
+                    const slider = document.getElementById('viewsSlider');
+                    tracking = !!(slider && slider.classList.contains('showing-results'));
+                    if (!tracking) return;
+                    startX = e.touches[0].clientX;
+                    startY = e.touches[0].clientY;
+                }, { passive: true });
+
+                resultsView.addEventListener('touchend', (e) => {
+                    if (!tracking) return;
+                    tracking = false;
+                    const deltaX = e.changedTouches[0].clientX - startX;
+                    const deltaY = e.changedTouches[0].clientY - startY;
+                    if (deltaX > SWIPE_THRESHOLD && Math.abs(deltaX) > Math.abs(deltaY) * DIRECTION_RATIO) {
+                        showHomeView();
+                        window.history.back();
+                    }
+                }, { passive: true });
+            })();
+            document.getElementById('modalCancelBtn').addEventListener('click', () => {
+                closeApiModal();
+                window.history.back();
+            });
+            document.getElementById('modalSaveBtn').addEventListener('click', saveSettingsFromModal);
+            document.getElementById('addQuickSearchBtn').addEventListener('click', addQuickSearchFromModal);
+
+            // Click fuori dal popup (sul backdrop) chiude il menu impostazioni
+            document.getElementById('apiModal').addEventListener('click', (e) => {
+                if (e.target.id === 'apiModal') {
+                    closeApiModal();
+                    window.history.back();
+                }
+            });
+
+            const amoledCheckbox = document.getElementById('amoledToggle');
+            if (amoledCheckbox) {
+                amoledCheckbox.checked = appState.isAmoled;
+                amoledCheckbox.addEventListener('change', (e) => {
+                    appState.isAmoled = e.target.checked;
+                    applyAmoledState(appState.isAmoled);
+                });
+            }
+
+            setupSwipeHandlers();
+            setupSheetCloseSwipe();
+            setupSettingsSheetSwipe();
+            checkAndApplyMarquee();
+        });
+
+        function openNowPlayingSheet() {
+            // Riparte sempre dalla posizione reale attuale (utile se arriva subito dopo un
+            // trascinamento interrotto a metà), animando da lì fino a completamente aperta.
+            const startPercent = getSheetCurrentPercentY();
+            nowPlayingSheet.style.transition = 'none';
+            nowPlayingSheet.style.transform = `translate3d(0, ${startPercent}%, 0)`;
+            // Forza il browser a registrare la posizione di partenza prima di animare.
+            void nowPlayingSheet.offsetHeight;
+            nowPlayingSheet.style.transition = 'transform 0.38s cubic-bezier(0.22, 1, 0.36, 1)';
+            nowPlayingSheet.classList.add('expanded');
+            nowPlayingSheet.style.transform = '';
+            // La History API è gestita in modo indipendente dall'animazione: se lo stato "sheet"
+            // è già in cima allo stack non lo duplichiamo, per evitare che tap ravvicinati
+            // desincronizzino pushState/back e blocchino il gesto successivo.
+            if (!window.history.state || window.history.state.page !== 'sheet') {
+                window.history.pushState({ page: 'sheet' }, 'Sheet');
+            }
+        }
+
+        function closeNowPlayingSheet() {
+            const startPercent = getSheetCurrentPercentY();
+            nowPlayingSheet.style.transition = 'none';
+            nowPlayingSheet.style.transform = `translate3d(0, ${startPercent}%, 0)`;
+            void nowPlayingSheet.offsetHeight;
+            nowPlayingSheet.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+            nowPlayingSheet.classList.remove('expanded');
+            nowPlayingSheet.style.transform = '';
+            if (window.history.state && window.history.state.page === 'sheet') {
+                window.history.back();
+            }
+        }
+
+        function setupCustomSelect() {
+            const trigger = document.getElementById('customSelectTrigger');
+            const optionsContainer = document.getElementById('customSelectOptions');
+            const selectedText = document.getElementById('customSelectedValue');
+
+            optionsContainer.innerHTML = '';
+            for (const [key, theme] of Object.entries(themes)) {
+                const opt = document.createElement('div');
+                opt.className = `custom-option px-4 py-3 ${key === appState.currentTheme ? 'selected' : ''}`;
+                opt.dataset.value = key;
+                opt.textContent = theme.name;
+                opt.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    document.querySelectorAll('.custom-option').forEach(el => el.classList.remove('selected'));
+                    opt.classList.add('selected');
+                    selectedText.textContent = theme.name;
+                    appState.currentTheme = key;
+                    applyTheme(key);
+                    optionsContainer.classList.remove('show');
+                });
+                optionsContainer.appendChild(opt);
+            }
+
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                optionsContainer.classList.toggle('show');
+            });
+
+            document.addEventListener('click', () => {
+                optionsContainer.classList.remove('show');
+            });
+        }
+
+        function setupFilterDropdowns() {
+            const dateTrigger = document.getElementById('filterDateTrigger');
+            const dateOptions = document.getElementById('filterDateOptions');
+            const dateValue = document.getElementById('filterDateValue');
+
+            const durationTrigger = document.getElementById('filterDurationTrigger');
+            const durationOptions = document.getElementById('filterDurationOptions');
+            const durationValue = document.getElementById('filterDurationValue');
+
+            dateTrigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                durationOptions.classList.add('hidden');
+                dateOptions.classList.toggle('hidden');
+            });
+
+            durationTrigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dateOptions.classList.add('hidden');
+                durationOptions.classList.toggle('hidden');
+            });
+
+            document.querySelectorAll('#filterDateOptions .filter-option').forEach(opt => {
+                opt.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    document.querySelectorAll('#filterDateOptions .filter-option').forEach(el => el.classList.remove('selected', 'font-bold'));
+                    opt.classList.add('selected', 'font-bold');
+                    dateValue.textContent = opt.textContent;
+                    appState.filterDate = opt.dataset.value;
+                    dateOptions.classList.add('hidden');
+                    performSearch(false);
+                });
+            });
+
+            document.querySelectorAll('#filterDurationOptions .filter-option').forEach(opt => {
+                opt.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    document.querySelectorAll('#filterDurationOptions .filter-option').forEach(el => el.classList.remove('selected', 'font-bold'));
+                    opt.classList.add('selected', 'font-bold');
+                    durationValue.textContent = opt.textContent;
+                    appState.filterDuration = opt.dataset.value;
+                    durationOptions.classList.add('hidden');
+                    performSearch(false);
+                });
+            });
+
+            document.addEventListener('click', () => {
+                dateOptions.classList.add('hidden');
+                durationOptions.classList.add('hidden');
+            });
+        }
+
+        // Dropdown filtri delle Playlist (home): valori indipendenti da quelli della ricerca
+        // manuale, salvati subito in localStorage così restano validi anche dopo un riavvio.
+        function setupPlaylistFilterDropdowns() {
+            const dateTrigger = document.getElementById('playlistFilterDateTrigger');
+            const dateOptions = document.getElementById('playlistFilterDateOptions');
+            const dateValue = document.getElementById('playlistFilterDateValue');
+
+            const durationTrigger = document.getElementById('playlistFilterDurationTrigger');
+            const durationOptions = document.getElementById('playlistFilterDurationOptions');
+            const durationValue = document.getElementById('playlistFilterDurationValue');
+            if (!dateTrigger || !durationTrigger) return;
+
+            dateTrigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                durationOptions.classList.add('hidden');
+                dateOptions.classList.toggle('hidden');
+            });
+
+            durationTrigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dateOptions.classList.add('hidden');
+                durationOptions.classList.toggle('hidden');
+            });
+
+            dateOptions.querySelectorAll('.filter-option').forEach(opt => {
+                opt.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    dateOptions.querySelectorAll('.filter-option').forEach(el => el.classList.remove('selected', 'font-bold'));
+                    opt.classList.add('selected', 'font-bold');
+                    dateValue.textContent = opt.textContent;
+                    appState.playlistFilterDate = opt.dataset.value;
+                    localStorage.setItem('youtubette_playlist_filter_date', opt.dataset.value);
+                    dateOptions.classList.add('hidden');
+                });
+            });
+
+            durationOptions.querySelectorAll('.filter-option').forEach(opt => {
+                opt.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    durationOptions.querySelectorAll('.filter-option').forEach(el => el.classList.remove('selected', 'font-bold'));
+                    opt.classList.add('selected', 'font-bold');
+                    durationValue.textContent = opt.textContent;
+                    appState.playlistFilterDuration = opt.dataset.value;
+                    localStorage.setItem('youtubette_playlist_filter_duration', opt.dataset.value);
+                    durationOptions.classList.add('hidden');
+                });
+            });
+
+            document.addEventListener('click', () => {
+                dateOptions.classList.add('hidden');
+                durationOptions.classList.add('hidden');
+            });
+        }
+
+        // Swipe orizzontale sul menu impostazioni: trascinando verso sinistra la sheet segue
+        // il dito in tempo reale (stessa direzione con cui è entrata) e si chiude oltre una
+        // soglia minima, invece di poter essere richiusa solo dal pulsante o dal backdrop.
+        function setupSettingsSheetSwipe() {
+            const modal = document.getElementById('apiModal');
+            const sheet = modal ? modal.querySelector('.settings-sheet') : null;
+            if (!modal || !sheet) return;
+
+            let startX = 0, startY = 0, currentX = 0, isDragging = false, isClosingDrag = false;
+
+            const onStart = (x, y, target) => {
+                if (target && target.closest('input, textarea, select, button')) return;
+                isDragging = true;
+                isClosingDrag = false;
+                startX = x;
+                startY = y;
+                currentX = 0;
+            };
+            const onMove = (x, y, e) => {
+                if (!isDragging) return;
+                const deltaX = x - startX;
+                const deltaY = y - startY;
+                if (!isClosingDrag) {
+                    // Si attiva la chiusura solo quando il gesto è chiaramente orizzontale
+                    // verso sinistra, per non rompere lo scroll verticale interno del popup.
+                    if (deltaX < -10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+                        isClosingDrag = true;
+                        sheet.style.transition = 'none';
+                    } else {
+                        return;
+                    }
+                }
+                currentX = deltaX;
+                if (currentX < 0) {
+                    if (e && e.cancelable) e.preventDefault();
+                    window.requestAnimationFrame(() => {
+                        if (isDragging) sheet.style.transform = `translateX(${currentX}px)`;
+                    });
+                }
+            };
+            const onEnd = () => {
+                if (!isDragging) return;
+                isDragging = false;
+                if (isClosingDrag) {
+                    sheet.style.transition = '';
+                    sheet.style.transform = '';
+                    if (Math.abs(currentX) > 80) {
+                        closeApiModal();
+                        window.history.back();
+                    }
+                }
+                isClosingDrag = false;
+                currentX = 0;
+            };
+
+            sheet.addEventListener('touchstart', (e) => onStart(e.touches[0].clientX, e.touches[0].clientY, e.target), { passive: true });
+            sheet.addEventListener('touchmove', (e) => onMove(e.touches[0].clientX, e.touches[0].clientY, e), { passive: false });
+            sheet.addEventListener('touchend', onEnd, { passive: true });
+
+            sheet.addEventListener('mousedown', (e) => {
+                if (e.target.closest('input, textarea, select, button')) return;
+                onStart(e.clientX, e.clientY, e.target);
+            });
+            window.addEventListener('mousemove', (e) => { if (isDragging) onMove(e.clientX, e.clientY); });
+            window.addEventListener('mouseup', onEnd);
+        }
+
+        function setupSheetCloseSwipe() {
+            let startY = 0, currentY = 0, isDragging = false, basePercent = -100;
+
+            const onStart = (y) => {
+                isDragging = true;
+                startY = y;
+                // Parte sempre da dove la sheet si trova realmente in quel momento, anche se
+                // arriva a metà di un'animazione precedente non ancora terminata.
+                basePercent = getSheetCurrentPercentY();
+                nowPlayingSheet.style.transition = 'none';
+            };
+
+            const onMove = (y) => {
+                if (!isDragging) return;
+                currentY = y - startY;
+                if (currentY > 0) {
+                    const height = nowPlayingSheet.offsetHeight || window.innerHeight;
+                    const dragPercent = (currentY / height) * 100;
+                    const nextPercent = Math.min(0, basePercent + dragPercent);
+                    window.requestAnimationFrame(() => {
+                        if (isDragging) {
+                            nowPlayingSheet.style.transform = `translate3d(0, ${nextPercent}%, 0)`;
+                        }
+                    });
+                }
+            };
+
+            const onEnd = () => {
+                if (!isDragging) return;
+                isDragging = false;
+                
+                nowPlayingSheet.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+                
+                if (currentY > 100) {
+                    closeNowPlayingSheet();
+                } else {
+                    nowPlayingSheet.style.transform = '';
+                }
+                currentY = 0;
+            };
+
+            sheetSwipeCloseArea.addEventListener('touchstart', (e) => onStart(e.touches[0].clientY), { passive: true });
+            sheetSwipeCloseArea.addEventListener('touchmove', (e) => onMove(e.touches[0].clientY), { passive: true });
+            sheetSwipeCloseArea.addEventListener('touchend', onEnd, { passive: true });
+
+            sheetSwipeCloseArea.addEventListener('mousedown', (e) => onStart(e.clientY));
+            window.addEventListener('mousemove', (e) => { if(isDragging) onMove(e.clientY); });
+            window.addEventListener('mouseup', onEnd);
+        }
+
+        function setupSwipeHandlers() {
+            let miniStartX = 0, miniStartY = 0;
+            let miniCurrentX = 0, miniCurrentY = 0;
+            let isDraggingMini = false;
+            // Distanza di trascinamento (in px) necessaria per rivelare lo sheet a schermo intero:
+            // in questo modo l'apertura segue il dito in modo continuo, come una vera bottom-sheet,
+            // invece di scattare di colpo al rilascio.
+            const OPEN_DRAG_DISTANCE = Math.min(window.innerHeight * 0.5, 420);
+            const OPEN_DRAG_THRESHOLD = 0.22; // % di progresso oltre cui, al rilascio, lo sheet si apre del tutto
+
+            let miniDragBasePercent = 0;
+            // Vero se durante QUESTO trascinamento la sheet è stata effettivamente spostata almeno
+            // una volta: usato al rilascio per decidere se "atterrarla", indipendentemente da come
+            // sono gli ultimi micro-movimenti del dito (che a volte, per un attimo, sono più
+            // orizzontali che verticali pur essendo parte dello stesso gesto verso l'alto).
+            let sheetWasMoved = false;
+            // Direzione del gesto ('horizontal' = cambio brano, 'vertical' = apertura sheet):
+            // viene decisa UNA SOLA VOLTA superata una soglia minima di movimento e poi resta
+            // bloccata per tutto il trascinamento. Senza questo blocco, ridecidendo la direzione
+            // ad ogni singolo evento di movimento, un dito che si sposta quasi in diagonale
+            // farebbe rimbalzare continuamente il gesto tra le due modalità, con lo sheet che
+            // si muove a scatti invece di seguire il dito in modo fluido durante lo swipe in alto.
+            let dragDirection = null;
+            const DIRECTION_LOCK_THRESHOLD = 8; // px minimi di movimento prima di fissare la direzione
+            const startMiniDrag = (x, y, target) => {
+                if (target.closest('#miniPlayerControls') || target.closest('#miniProgressBarArea')) return;
+                isDraggingMini = true;
+                miniStartX = x;
+                miniStartY = y;
+                miniPlayerWasDragged = false;
+                sheetWasMoved = false;
+                dragDirection = null;
+                // Riparte sempre dalla posizione reale della sheet, non da "chiusa" per forza:
+                // così il gesto resta sotto controllo anche subito dopo un'altra animazione.
+                miniDragBasePercent = getSheetCurrentPercentY();
+                miniTextContainer.classList.add('dragging-active');
+            };
+            // Il testo scorre solo per un breve tratto (mai fino a sovrapporre thumbnail o pulsante play)
+            // e la dissolvenza si completa esattamente quando raggiunge quel limite: niente più
+            // testo che sparisce troppo presto a sinistra o resta visibile fin troppo vicino al pulsante a destra.
+            const MINI_TEXT_MAX_OFFSET = 40; // px massimi di scorrimento del testo
+            const MINI_TEXT_FADE_DISTANCE = 55; // px di trascinamento dito dopo i quali il testo è invisibile
+            const MINI_DRAG_CLICK_THRESHOLD = 6; // px oltre i quali è un vero trascinamento, non un tap
+
+            const moveMiniDrag = (x, y) => {
+                if (!isDraggingMini) return;
+                miniCurrentX = x - miniStartX;
+                miniCurrentY = y - miniStartY;
+
+                if (Math.abs(miniCurrentX) > MINI_DRAG_CLICK_THRESHOLD || Math.abs(miniCurrentY) > MINI_DRAG_CLICK_THRESHOLD) {
+                    miniPlayerWasDragged = true;
+                }
+
+                if (!dragDirection) {
+                    if (Math.abs(miniCurrentX) > DIRECTION_LOCK_THRESHOLD || Math.abs(miniCurrentY) > DIRECTION_LOCK_THRESHOLD) {
+                        dragDirection = Math.abs(miniCurrentX) > Math.abs(miniCurrentY) ? 'horizontal' : 'vertical';
+                    } else {
+                        return; // Movimento troppo piccolo per decidere: aspetta il prossimo evento.
+                    }
+                }
+
+                if (dragDirection === 'horizontal') {
+                    const clampedX = Math.max(-MINI_TEXT_MAX_OFFSET, Math.min(MINI_TEXT_MAX_OFFSET, miniCurrentX));
+                    const fadeProgress = Math.min(1, Math.abs(miniCurrentX) / MINI_TEXT_FADE_DISTANCE);
+                    miniTextContainer.style.transform = `translate3d(${clampedX}px, 0, 0)`;
+                    miniTextContainer.style.opacity = Math.max(0, 1 - fadeProgress);
+                } else if (miniCurrentY < 0) {
+                    // Trascinamento verso l'alto: lo sheet segue il dito in tempo reale,
+                    // esattamente come già succede in chiusura, invece di apparire di scatto.
+                    // Parte sempre dalla posizione reale attuale (miniDragBasePercent), non da 0
+                    // per forza, così resta continuo anche se si ritocca subito dopo un rilascio.
+                    sheetWasMoved = true;
+                    const dragPercent = (Math.abs(miniCurrentY) / OPEN_DRAG_DISTANCE) * 100;
+                    const nextPercent = Math.max(-100, miniDragBasePercent - dragPercent);
+                    nowPlayingSheet.style.transition = 'none';
+                    nowPlayingSheet.style.transform = `translate3d(0, ${nextPercent}%, 0)`;
+                }
+            };
+            const settleSheetDrag = (shouldOpen) => {
+                // Eseguito in modo sincrono (niente requestAnimationFrame): se lo facessimo in modo
+                // asincrono, un nuovo tocco arrivato subito dopo potrebbe "vincere" la corsa e poi
+                // essere comunque sovrascritto da questo frame in ritardo, facendo scattare la sheet
+                // di colpo e dando l'impressione di dover aspettare la fine dell'animazione.
+                nowPlayingSheet.style.transition = 'transform 0.38s cubic-bezier(0.22, 1, 0.36, 1)';
+                if (shouldOpen) {
+                    nowPlayingSheet.classList.add('expanded');
+                    nowPlayingSheet.style.transform = '';
+                    if (!window.history.state || window.history.state.page !== 'sheet') {
+                        window.history.pushState({ page: 'sheet' }, 'Sheet');
+                    }
+                } else {
+                    nowPlayingSheet.style.transform = '';
+                }
+            };
+            const endMiniDrag = () => {
+                if (!isDraggingMini) return;
+                isDraggingMini = false;
+                miniTextContainer.classList.remove('dragging-active');
+
+                if (sheetWasMoved) {
+                    // Decide in base alla posizione REALE raggiunta (non al rapporto tra l'ultimo
+                    // micro-movimento orizzontale/verticale del dito, che può ingannare vicino al
+                    // rilascio): così la sheet viene sempre "atterrata" da dove si trova davvero,
+                    // aperta o richiusa, e non resta mai abbandonata a metà.
+                    const finalPercent = getSheetCurrentPercentY();
+                    settleSheetDrag(finalPercent <= -100 * OPEN_DRAG_THRESHOLD);
+                }
+                else if (miniCurrentX > 80) {
+                    prevTrack();
+                } else if (miniCurrentX < -80) {
+                    nextTrack();
+                }
+
+                sheetWasMoved = false;
+                dragDirection = null;
+
+                miniTextContainer.style.transform = 'translate3d(0, 0, 0)';
+                miniTextContainer.style.opacity = '1';
+                miniCurrentX = 0;
+                miniCurrentY = 0;
+            };
+
+            miniPlayer.addEventListener('touchstart', (e) => startMiniDrag(e.touches[0].clientX, e.touches[0].clientY, e.target), { passive: true });
+            miniPlayer.addEventListener('touchmove', (e) => moveMiniDrag(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
+            miniPlayer.addEventListener('touchend', endMiniDrag, { passive: true });
+
+            miniPlayer.addEventListener('mousedown', (e) => {
+                if (e.target.closest('#miniPlayerControls') || e.target.closest('#miniProgressBarArea')) return;
+                e.preventDefault();
+                startMiniDrag(e.clientX, e.clientY, e.target);
+            });
+            window.addEventListener('mousemove', (e) => moveMiniDrag(e.clientX, e.clientY));
+            window.addEventListener('mouseup', endMiniDrag);
+
+            let titleStartX = 0, titleCurrentX = 0, isDraggingTitle = false;
+            const startTitleDrag = (x) => {
+                isDraggingTitle = true;
+                titleStartX = x;
+                swipeTitle.classList.add('dragging');
+                marqueeContent.classList.remove('animate-marquee');
+            };
+            const moveTitleDrag = (x) => {
+                if (!isDraggingTitle) return;
+                titleCurrentX = x - titleStartX;
+                const opacity = Math.max(0.2, 1 - Math.abs(titleCurrentX) / 350);
+                swipeTitle.style.transform = `translate3d(${titleCurrentX}px, 0, 0)`;
+                swipeTitle.style.opacity = opacity;
+            };
+            const endTitleDrag = () => {
+                if (!isDraggingTitle) return;
+                isDraggingTitle = false;
+                swipeTitle.classList.remove('dragging');
+                if (titleCurrentX > 75) animateOutAndChange('right');
+                else if (titleCurrentX < -75) animateOutAndChange('left');
+                else {
+                    swipeTitle.style.transform = 'translate3d(0, 0, 0)';
+                    swipeTitle.style.opacity = '1';
+                    checkAndApplyMarquee();
+                }
+                titleCurrentX = 0;
+            };
+
+            swipeTitle.addEventListener('touchstart', (e) => startTitleDrag(e.touches[0].clientX), { passive: true });
+            swipeTitle.addEventListener('touchmove', (e) => { if(isDraggingTitle) { e.preventDefault(); moveTitleDrag(e.touches[0].clientX); } }, { passive: false });
+            swipeTitle.addEventListener('touchend', endTitleDrag, { passive: true });
+            swipeTitle.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                startTitleDrag(e.clientX);
+            });
+            swipeTitle.addEventListener('dragstart', (e) => e.preventDefault());
+            window.addEventListener('mousemove', (e) => moveTitleDrag(e.clientX));
+            window.addEventListener('mouseup', endTitleDrag);
+        }
+
+        let activeScrubType = null;
+
+        function startScrub(e) {
+            if (!player?.getDuration || appState.currentIndex === -1) return;
+            isScrubbing = true;
+            activeScrubType = 'large';
+            progressBar.classList.add('scrubbing');
+            updateScrubPositionGeneral(e);
+        }
+
+        function startMiniScrub(e) {
+            if (!player?.getDuration || appState.currentIndex === -1) return;
+            isScrubbing = true;
+            activeScrubType = 'mini';
+            updateScrubPositionGeneral(e);
+        }
+
+        function moveScrubGeneral(e) {
+            if (!isScrubbing) return;
+            if (e.cancelable) e.preventDefault();
+            updateScrubPositionGeneral(e);
+        }
+
+        function updateScrubPositionGeneral(e) {
+            const container = activeScrubType === 'large' ? progressBarContainer : miniProgressBarContainer;
+            const rect = container.getBoundingClientRect();
+            
+            let clientX = 0;
+            if (e.touches && e.touches.length > 0) clientX = e.touches[0].clientX;
+            else if (e.changedTouches && e.changedTouches.length > 0) clientX = e.changedTouches[0].clientX;
+            else clientX = e.clientX;
+
+            let offsetX = clientX - rect.left;
+            offsetX = Math.max(0, Math.min(offsetX, rect.width));
+            scrubPercentage = offsetX / rect.width;
+
+            const duration = player.getDuration() || 0;
+            const targetTime = duration * scrubPercentage;
+
+            progressBar.style.width = `${scrubPercentage * 100}%`;
+            miniProgressBar.style.width = `${scrubPercentage * 100}%`;
+            
+            document.getElementById('currentTime').innerText = formatTime(targetTime);
+            document.getElementById('miniCurrentTime').innerText = formatTime(targetTime);
+
+            if (activeScrubType === 'large') {
+                let relativeLeft = clientX - rect.left;
+                relativeLeft = Math.max(0, Math.min(relativeLeft, rect.width));
+                progressTooltip.innerText = formatTime(targetTime);
+                progressTooltip.style.left = `${relativeLeft}px`;
+                progressTooltip.classList.remove('hidden');
+            }
+        }
+
+        function endScrubGeneral() {
+            if (!isScrubbing) return;
+            isScrubbing = false;
+            progressBar.classList.remove('scrubbing');
+            progressTooltip.classList.add('hidden');
+
+            const duration = player.getDuration() || 0;
+            player.seekTo(duration * scrubPercentage, true);
+            activeScrubType = null;
+        }
+
+        function applyTheme(themeKey) {
+            const theme = themes[themeKey] || themes.spotifyGreen;
+            const root = document.documentElement;
+            
+            root.style.setProperty('--bg-main', theme.bgMain);
+            root.style.setProperty('--bg-card', theme.bgCard);
+            root.style.setProperty('--bg-input', theme.bgInput);
+            root.style.setProperty('--accent', theme.accent);
+            root.style.setProperty('--text-main', theme.textMain);
+            root.style.setProperty('--text-muted', theme.textMuted);
+            root.style.setProperty('--is-light', theme.isLight);
+
+            // Aggiorna tutti i meta tag theme-color disponibili per costringere Firefox a ricolorare la barra
+            document.querySelectorAll('meta[name="theme-color"]').forEach(meta => {
+                meta.setAttribute('content', theme.bgMain);
+            });
+            
+            appState.currentTheme = themeKey;
+            localStorage.setItem('youtubette_theme', themeKey);
+            
+            const selectedText = document.getElementById('customSelectedValue');
+            if (selectedText) selectedText.textContent = theme.name;
+            
+            if (appState.currentIndex !== -1) renderTracklist();
+        }
+
+        function applyAmoledState(isAmoled) {
+            if (isAmoled) {
+                document.body.classList.add('amoled-active');
+            } else {
+                document.body.classList.remove('amoled-active');
+            }
+            localStorage.setItem('youtubette_amoled', isAmoled);
+        }
+
+        function openApiModal() {
+            const modal = document.getElementById('apiModal');
+            const input = document.getElementById('modalApiKeyInput');
+            if (modal && input) {
+                input.value = appState.apiKey;
+                modal.classList.add('active');
+            }
+        }
+
+        function closeApiModal() {
+            const modal = document.getElementById('apiModal');
+            if (modal) modal.classList.remove('active');
+        }
+
+        function saveSettingsFromModal() {
+            const key = document.getElementById('modalApiKeyInput').value.trim();
+            appState.apiKey = key;
+            localStorage.setItem('youtubette_api_key', key);
+            localStorage.setItem('youtubette_theme', appState.currentTheme);
+            applyTheme(appState.currentTheme);
+            applyAmoledState(appState.isAmoled);
+
+            document.getElementById('apiErrorBadge').classList.add('hidden');
+            document.getElementById('modalApiBadgeError').classList.add('hidden');
+
+            const saveBtn = document.getElementById('modalSaveBtn');
+            saveBtn.innerHTML = "Salvato! ✓";
+            
+            setTimeout(() => {
+                saveBtn.innerHTML = "Salva";
+                closeApiModal();
+                window.history.back();
+            }, 800);
+        }
+
+        // --- RICERCHE RAPIDE (scorciatoie a cerchio in home) ---
+        // L'artwork viene recuperato da Deezer (gratuito, senza chiave) come fonte
+        // primaria, con iTunes come ripiego. Deezer NON manda header CORS sulle risposte
+        // JSON normali, quindi lo interroghiamo in modalità JSONP (un tag <script>, non una
+        // fetch): è così che si aggira il blocco CORS, e non risente della quota/rate-limit
+        // di iTunes che stava causando "Nessuna nuova immagine trovata" in continuazione.
+        function jsonpRequest(url, timeoutMs = 8000) {
+            return new Promise((resolve, reject) => {
+                const callbackName = 'jsonp_cb_' + Math.random().toString(36).slice(2);
+                const script = document.createElement('script');
+                let settled = false;
+
+                const cleanup = () => {
+                    delete window[callbackName];
+                    script.remove();
+                };
+
+                window[callbackName] = (data) => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    resolve(data);
+                };
+
+                script.onerror = () => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    reject(new Error('Errore caricamento script JSONP'));
+                };
+
+                setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    reject(new Error('Timeout JSONP'));
+                }, timeoutMs);
+
+                const separator = url.includes('?') ? '&' : '?';
+                script.src = `${url}${separator}output=jsonp&callback=${callbackName}`;
+                document.body.appendChild(script);
+            });
+        }
+
+        // type: 'track' o 'album'. Restituisce l'array grezzo di risultati Deezer.
+        async function fetchDeezerResults(term, type) {
+            try {
+                const endpoint = type === 'album'
+                    ? 'https://api.deezer.com/search/album'
+                    : 'https://api.deezer.com/search/track';
+                const data = await jsonpRequest(`${endpoint}?q=${encodeURIComponent(term)}&limit=15`);
+                return (data && data.data) || [];
+            } catch (err) {
+                console.warn(`Impossibile recuperare risultati Deezer (${type}):`, err);
+                return [];
+            }
+        }
+
+        // Le tracce hanno la copertina annidata in item.album, gli album ce l'hanno diretta.
+        function extractDeezerArtwork(item, type) {
+            if (type === 'album') return item.cover_big || item.cover_medium || null;
+            return (item.album && (item.album.cover_big || item.album.cover_medium)) || null;
+        }
+
+        async function fetchArtworkForQuickSearch(term) {
+            const deezerTracks = await fetchDeezerResults(term, 'track');
+            if (deezerTracks.length > 0) {
+                const art = extractDeezerArtwork(deezerTracks[0], 'track');
+                if (art) return art;
+            }
+            // Ripiego su iTunes se Deezer non ha dato nulla
+            try {
+                const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=1&entity=musicTrack`);
+                const data = await res.json();
+                if (data.results && data.results[0] && data.results[0].artworkUrl100) {
+                    return data.results[0].artworkUrl100.replace('100x100bb', '400x400bb');
+                }
+            } catch (err) {
+                console.warn('Impossibile recuperare artwork da iTunes:', err);
+            }
+            return null;
+        }
+
+        // Recupera una rosa di copertine per lo stesso termine di ricerca e ne
+        // sceglie una a caso, escludendo (quando possibile) quella già in uso,
+        // così il pulsante "Cambia immagine" restituisce davvero qualcosa di diverso.
+        // NOTA: le due entity (track e album, sia su Deezer che su iTunes) vengono
+        // interrogate in SEQUENZA, e quella per gli album solo se la prima non basta
+        // da sola: interrogarle in parallelo ad ogni tentativo moltiplicava le richieste
+        // verso le API, rischiando di sforarne la quota inutilmente.
+        async function fetchItunesResults(term, entity) {
+            try {
+                const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&limit=15&entity=${entity}`);
+                const data = await res.json();
+                return data.results || [];
+            } catch (err) {
+                console.warn(`Impossibile recuperare risultati iTunes (${entity}):`, err);
+                return [];
+            }
+        }
+
+        async function fetchRandomArtworkForQuickSearch(term, excludeUrl) {
+            let candidates = [...new Set(
+                (await fetchDeezerResults(term, 'track'))
+                    .map(r => extractDeezerArtwork(r, 'track'))
+                    .filter(Boolean)
+            )];
+
+            // Query aggiuntiva sugli album solo se i brani non bastano a dare varietà:
+            // per termini generici (es. un genere come "R&B") una sola ricerca di tracce
+            // può restituire pochi risultati distinti.
+            if (candidates.length < 5) {
+                const albumCandidates = (await fetchDeezerResults(term, 'album'))
+                    .map(r => extractDeezerArtwork(r, 'album'))
+                    .filter(Boolean);
+                candidates = [...new Set([...candidates, ...albumCandidates])];
+            }
+
+            // Se Deezer non ha dato proprio nulla (rete/blocco diverso da iTunes),
+            // ripieghiamo sull'API di iTunes come seconda fonte.
+            if (candidates.length === 0) {
+                candidates = [...new Set(
+                    (await fetchItunesResults(term, 'musicTrack'))
+                        .filter(r => r.artworkUrl100)
+                        .map(r => r.artworkUrl100.replace('100x100bb', '400x400bb'))
+                )];
+                if (candidates.length < 5) {
+                    const albumCandidates = (await fetchItunesResults(term, 'album'))
+                        .filter(r => r.artworkUrl100)
+                        .map(r => r.artworkUrl100.replace('100x100bb', '400x400bb'));
+                    candidates = [...new Set([...candidates, ...albumCandidates])];
+                }
+            }
+
+            if (excludeUrl && candidates.length > 1) {
+                candidates = candidates.filter(c => c !== excludeUrl);
+            }
+            if (candidates.length > 0) {
+                return candidates[Math.floor(Math.random() * candidates.length)];
+            }
+            return null;
+        }
+
+        async function refreshQuickSearchArtwork(id) {
+            const qs = appState.quickSearches.find(q => q.id === id);
+            if (!qs) return;
+
+            const btn = document.querySelector(`.quickSearchRefreshBtn[data-id="${id}"]`);
+            const icon = btn ? btn.querySelector('i') : null;
+            if (btn) btn.disabled = true;
+            if (icon) icon.classList.add('fa-spin');
+
+            const newArtwork = await fetchRandomArtworkForQuickSearch(qs.name, qs.artwork)
+                || await fetchRandomArtworkForQuickSearch(qs.query, qs.artwork);
+
+            if (newArtwork) {
+                qs.artwork = newArtwork;
+                saveQuickSearches();
+                renderQuickSearchManageList();
+                renderQuickSearchHome();
+            } else {
+                showToast("Nessuna nuova immagine trovata.");
+                if (icon) icon.classList.remove('fa-spin');
+                if (btn) btn.disabled = false;
+            }
+        }
+
+        function saveQuickSearches() {
+            localStorage.setItem('youtubette_quick_searches', JSON.stringify(appState.quickSearches));
+        }
+
+        async function addQuickSearchFromModal() {
+            const queryInput = document.getElementById('quickSearchQueryInput');
+            const nameInput = document.getElementById('quickSearchNameInput');
+            const query = queryInput.value.trim();
+            const name = nameInput.value.trim();
+            if (!query || !name) return;
+
+            const addBtn = document.getElementById('addQuickSearchBtn');
+            addBtn.disabled = true;
+            addBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Ricerca copertina...';
+
+            const artwork = await fetchArtworkForQuickSearch(name) || await fetchArtworkForQuickSearch(query);
+
+            appState.quickSearches.push({ id: 'qs_' + Date.now(), query, name, artwork });
+            saveQuickSearches();
+            renderQuickSearchManageList();
+            renderQuickSearchHome();
+
+            queryInput.value = '';
+            nameInput.value = '';
+            addBtn.disabled = false;
+            addBtn.innerHTML = '<i class="fa-solid fa-plus mr-1.5"></i> Aggiungi Scorciatoia';
+        }
+
+        function deleteQuickSearch(id) {
+            appState.quickSearches = appState.quickSearches.filter(qs => qs.id !== id);
+            saveQuickSearches();
+            renderQuickSearchManageList();
+            renderQuickSearchHome();
+        }
+
+        function renderQuickSearchManageList() {
+            const container = document.getElementById('quickSearchManageList');
+            if (!container) return;
+
+            if (appState.quickSearches.length === 0) {
+                container.innerHTML = '<p class="text-[10px] italic text-center custom-text-muted py-2">Nessuna scorciatoia salvata.</p>';
+                return;
+            }
+
+            container.innerHTML = appState.quickSearches.map(qs => `
+                <div class="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2">
+                    <div class="flex items-center min-w-0 flex-1 mr-2">
+                        <div class="w-6 h-6 rounded-full overflow-hidden bg-neutral-800 shrink-0 mr-2 flex items-center justify-center">
+                            ${qs.artwork ? `<img src="${qs.artwork}" class="w-full h-full object-cover" alt="">` : '<i class="fa-solid fa-music text-[9px] custom-text-muted"></i>'}
+                        </div>
+                        <span class="text-xs text-white truncate">${escapeHtml(qs.name)}</span>
+                    </div>
+                    <div class="flex items-center gap-1 shrink-0">
+                        <button data-id="${qs.id}" class="quickSearchRefreshBtn text-neutral-400 hover:text-[var(--accent)] text-xs p-1.5" title="Cambia immagine">
+                            <i class="fa-solid fa-arrows-rotate"></i>
+                        </button>
+                        <button data-id="${qs.id}" class="quickSearchDeleteBtn text-neutral-400 hover:text-red-500 text-xs p-1.5">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            container.querySelectorAll('.quickSearchRefreshBtn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    refreshQuickSearchArtwork(btn.dataset.id);
+                });
+            });
+
+            container.querySelectorAll('.quickSearchDeleteBtn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteQuickSearch(btn.dataset.id);
+                });
+            });
+        }
+
+        function renderQuickSearchHome() {
+            const container = document.getElementById('quickSearchHome');
+            const placeholderText = document.getElementById('placeholderText');
+            if (!container) return;
+
+            if (appState.quickSearches.length === 0) {
+                container.classList.add('hidden');
+                container.innerHTML = '';
+                if (placeholderText) placeholderText.classList.remove('hidden');
+                return;
+            }
+
+            if (placeholderText) placeholderText.classList.add('hidden');
+            container.classList.remove('hidden');
+            container.innerHTML = appState.quickSearches.map(qs => `
+                <div class="quickSearchCircle flex flex-col items-center cursor-pointer active:scale-95 transition-transform" data-query="${escapeHtml(qs.query)}">
+                    <div class="w-24 h-24 rounded-full overflow-hidden bg-white/5 border border-white/10 shadow-md flex items-center justify-center mb-2">
+                        ${qs.artwork ? `<img src="${qs.artwork}" class="w-full h-full object-cover" alt="">` : '<i class="fa-solid fa-music text-2xl custom-text-muted"></i>'}
+                    </div>
+                    <span class="text-xs font-semibold text-white text-center leading-tight line-clamp-2">${escapeHtml(qs.name)}</span>
+                </div>
+            `).join('');
+
+            container.querySelectorAll('.quickSearchCircle').forEach(circle => {
+                circle.addEventListener('click', () => {
+                    searchInput.value = circle.dataset.query;
+                    performSearch(false, true);
+                });
+            });
+        }
+
+        async function redirectToDownload() {
+            if (appState.currentIndex === -1) return;
+            const currentTrack = appState.tracks[appState.currentIndex];
+            if (!currentTrack || !currentTrack.id) return;
+            
+            const youtubeUrl = `https://www.youtube.com/watch?v=${currentTrack.id}`;
+            
+            try {
+                await navigator.clipboard.writeText(youtubeUrl);
+                showToast("Link copiato!");
+                setTimeout(() => {
+                    window.open(`https://kleger.pl/`, '_blank');
+                }, 800);
+            } catch (err) {
+                window.open(`https://kleger.pl/`, '_blank');
+            }
+        }
+
+        function decodeHtmlEntities(text) {
+            if (!text) return '';
+            const el = document.createElement('textarea');
+            el.innerHTML = text;
+            return el.value;
+        }
+
+        function showToast(message) {
+            const oldToast = document.getElementById('youtubette-toast');
+            if (oldToast) oldToast.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'youtubette-toast';
+            toast.className = 'fixed bottom-36 left-1/2 transform -translate-x-1/2 border font-medium text-xs py-2.5 px-5 rounded-full shadow-2xl z-[150] transition-all duration-300 opacity-0 translate-y-2 custom-bg-card border-[var(--accent)] text-white';
+            toast.innerHTML = `<i class="fa-solid fa-circle-check mr-2 custom-text-accent"></i> ${message}`;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.remove('opacity-0', 'translate-y-2');
+                toast.classList.add('opacity-100', 'translate-y-0');
+            }, 50);
+            
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        function toggleDownloadButtons(enabled) {
+            const sheetDbtn = document.getElementById('sheetDownloadBtn');
+            if (!sheetDbtn) return;
+            if (enabled) {
+                sheetDbtn.disabled = false;
+                sheetDbtn.removeAttribute('disabled');
+                sheetDbtn.classList.remove('opacity-30', 'cursor-not-allowed', 'text-neutral-400');
+                sheetDbtn.classList.add('opacity-100', 'text-neutral-300', 'cursor-pointer');
+            } else {
+                sheetDbtn.disabled = true;
+                sheetDbtn.setAttribute('disabled', 'true');
+                sheetDbtn.classList.add('opacity-30', 'cursor-not-allowed', 'text-neutral-400');
+                sheetDbtn.classList.remove('opacity-100', 'text-neutral-300');
+            }
+        }
+
+        // Animazione Swipe per il cambio brano sulla scheda principale
+        function animateOutAndChange(direction) {
+            if (appState.tracks.length === 0) {
+                swipeTitle.style.transform = 'translate3d(0, 0, 0)';
+                swipeTitle.style.opacity = '1';
+                return;
+            }
+            swipeTitle.style.transition = 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease-out';
+            swipeTitle.style.transform = `translate3d(${direction === 'right' ? '100%' : '-100%'}, 0, 0)`;
+            swipeTitle.style.opacity = '0';
+            setTimeout(() => {
+                if (direction === 'right') prevTrack(); else nextTrack();
+                swipeTitle.style.transition = 'none';
+                swipeTitle.style.transform = `translate3d(${direction === 'right' ? '-100%' : '100%'}, 0, 0)`;
+                swipeTitle.offsetHeight;
+                swipeTitle.style.transition = 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease-out';
+                swipeTitle.style.transform = 'translate3d(0, 0, 0)';
+                swipeTitle.style.opacity = '1';
+            }, 200);
+        }
+
+        function checkAndApplyMiniMarquee(titleText) {
+            const miniContent = document.getElementById('miniMarqueeContent');
+            const miniWrapper = document.getElementById('miniMarqueeWrapper');
+            if (!miniContent || !miniWrapper) return;
+
+            miniContent.classList.remove('animate-marquee');
+            const cleanText = `<span id="miniPlayerTitle" class="text-sm font-bold text-[var(--text-main)]">${escapeHtml(titleText)}</span>`;
+
+            miniContent.innerHTML = cleanText;
+            if (miniContent.scrollWidth > miniWrapper.clientWidth) {
+                // Stessa tecnica del titolo grande: il gap ripetuto dopo ogni copia rende il loop
+                // perfettamente ciclico, senza scatti quando l'animazione ricomincia.
+                const gap = "<span class='inline-block w-16'></span>";
+                miniContent.innerHTML = cleanText + gap + cleanText + gap;
+                miniContent.classList.add('animate-marquee');
+            }
+        }
+
+        function checkAndApplyMarquee() {
+            const titleEl = document.getElementById('playerTrackTitle');
+            const titleText = titleEl ? titleEl.innerText : 'YouTubette';
+            
+            marqueeContent.classList.remove('animate-marquee');
+            const wrapper = swipeTitle.querySelector('.marquee-wrapper');
+            let cleanText = `<span id="playerTrackTitle" class="text-sm md:text-base font-black text-white">${escapeHtml(titleText)}</span>`;
+            
+            marqueeContent.innerHTML = cleanText;
+            if (wrapper && marqueeContent.scrollWidth > wrapper.clientWidth) {
+                // Per un loop davvero infinito (senza scatto a fine ciclo) il gap va ripetuto
+                // dopo OGNI copia del testo, non solo in mezzo: così il blocco [testo+gap] si ripete
+                // identico e la traslazione di -50% riporta esattamente al punto di partenza.
+                const gap = "<span class='inline-block w-16'></span>";
+                marqueeContent.innerHTML = cleanText + gap + cleanText + gap;
+                marqueeContent.classList.add('animate-marquee');
+            }
+        }
+
+        function getPublishedAfterDate(filterValue) {
+            if (filterValue === 'any') return null;
+            const now = new Date();
+            switch (filterValue) {
+                case 'hour':
+                    now.setHours(now.getHours() - 1);
+                    break;
+                case 'today':
+                    now.setDate(now.getDate() - 1);
+                    break;
+                case 'week':
+                    now.setDate(now.getDate() - 7);
+                    break;
+                case 'month':
+                    now.setMonth(now.getMonth() - 1);
+                    break;
+                case 'year':
+                    now.setFullYear(now.getFullYear() - 1);
+                    break;
+            }
+            return now.toISOString();
+        }
+
+        async function performSearch(isLoadMore = false, isQuickSearch = false) {
+            const query = searchInput.value.trim();
+            const resultsStatusText = document.getElementById('resultsStatusText');
+            
+            if (!query || (isLoadMore && isFetchingMore)) return;
+
+            if (!appState.apiKey) { 
+                showVisualApiError();
+                const placeholderText = document.getElementById('placeholderText');
+                if (placeholderText) placeholderText.innerHTML = `<span class="text-red-500 font-bold block mb-1">Chiave API Mancante!</span> Clicca sull'icona delle impostazioni in alto a sinistra per configurarla.`;
+                openApiModal(); 
+                return; 
+            }
+
+            if (!isLoadMore) {
+                // Memorizza il contesto della ricerca (playlist o ricerca manuale) così che
+                // anche il caricamento automatico delle pagine successive (isLoadMore) continui
+                // ad usare gli stessi filtri, invece di quelli dell'altro contesto.
+                currentSearchIsQuickSearch = isQuickSearch;
+                currentListSource = 'youtube';
+                showResultsView();
+                appState.tracks = []; appState.currentIndex = -1; nextSearchPageToken = '';
+                toggleDownloadButtons(false);
+                document.getElementById('trackList').innerHTML = '';
+                if (resultsStatusText) resultsStatusText.classList.add('hidden');
+            } else isFetchingMore = true;
+
+            try {
+                const activeFilterDate = currentSearchIsQuickSearch ? appState.playlistFilterDate : appState.filterDate;
+                const activeFilterDuration = currentSearchIsQuickSearch ? appState.playlistFilterDuration : appState.filterDuration;
+
+                let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=25&q=${encodeURIComponent(query)}&type=video&videoEmbeddable=true&key=${appState.apiKey}`;
+                
+                if (activeFilterDuration !== 'any') {
+                    url += `&videoDuration=${activeFilterDuration}`;
+                }
+                const publishedAfter = getPublishedAfterDate(activeFilterDate);
+                if (publishedAfter) {
+                    url += `&publishedAfter=${encodeURIComponent(publishedAfter)}`;
+                }
+
+                if (nextSearchPageToken) url += `&pageToken=${nextSearchPageToken}`;
+
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error.message);
+                }
+
+                document.getElementById('apiErrorBadge').classList.add('hidden');
+                document.getElementById('modalApiBadgeError').classList.add('hidden');
+
+                nextSearchPageToken = data.nextPageToken || '';
+                const previousCount = appState.tracks.length;
+                let newTracks = data.items.map(item => ({
+                    id: item.id.videoId, 
+                    title: decodeHtmlEntities(item.snippet.title), 
+                    channel: decodeHtmlEntities(item.snippet.channelTitle), 
+                    thumbnail: item.snippet.thumbnails.high ? item.snippet.thumbnails.high.url : item.snippet.thumbnails.default.url
+                }));
+
+                appState.tracks = appState.tracks.concat(newTracks);
+                renderTracklist(isLoadMore ? previousCount : 0);
+            } catch (error) {
+                showVisualApiError();
+                if (resultsStatusText && !isLoadMore) {
+                    resultsStatusText.classList.remove('hidden');
+                    resultsStatusText.innerHTML = `
+                        <div class="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-center max-w-xs mx-auto">
+                            <i class="fa-solid fa-triangle-exclamation text-red-500 text-lg mb-2"></i>
+                            <p class="text-xs font-bold text-red-400">Errore API di YouTube</p>
+                            <p class="text-[10px] mt-1 custom-text-muted">La tua chiave API potrebbe essere non valida o scaduta.</p>
+                        </div>
+                    `;
+                }
+            } finally { if (isLoadMore) isFetchingMore = false; }
+        }
+
+        // --- IMPORT PLAYLIST SPOTIFY ---
+        // Niente API/chiave Spotify: leggiamo la pagina embed pubblica (open.spotify.com/embed/playlist/...),
+        // la stessa che genera i player incorporabili su siti terzi, che espone titolo/artista/durata dei
+        // brani già nell'HTML iniziale. Essendo una pagina non pensata per fetch da altri domini, serve un
+        // proxy CORS pubblico e gratuito per leggerla dal browser: ne proviamo due in sequenza.
+        // NB: è scraping non ufficiale di una pagina non documentata da Spotify, quindi potrebbe smettere
+        // di funzionare se Spotify ne cambia la struttura, e mostra al più i primi ~100 brani della playlist.
+
+        function extractSpotifyPlaylistId(url) {
+            const match = url.match(/playlist[\/:]([a-zA-Z0-9]{15,25})/);
+            return match ? match[1] : null;
+        }
+
+        function isSpotifyPlaylistLink(text) {
+            return /spotify\.com\/(?:[a-z-]+\/)?playlist\/[a-zA-Z0-9]{15,25}/i.test(text)
+                || /^spotify:playlist:[a-zA-Z0-9]{15,25}$/i.test(text);
+        }
+
+        async function fetchSpotifyEmbedText(playlistId) {
+            const embedUrl = `https://open.spotify.com/embed/playlist/${playlistId}`;
+
+            // 1° tentativo: r.jina.ai, un "reader" pubblico gratuito che restituisce il
+            // contenuto testuale/markdown già ripulito della pagina (nessuna chiave, CORS ok).
+            try {
+                const res = await fetch(`https://r.jina.ai/${embedUrl}`);
+                if (res.ok) {
+                    const text = await res.text();
+                    if (text && text.length > 200) return { type: 'text', data: text };
+                }
+            } catch (err) { console.warn('r.jina.ai non disponibile:', err); }
+
+            // 2° tentativo: proxy CORS generico che restituisce l'HTML grezzo della pagina.
+            try {
+                const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(embedUrl)}`);
+                if (res.ok) {
+                    const html = await res.text();
+                    if (html && html.length > 200) return { type: 'html', data: html };
+                }
+            } catch (err) { console.warn('allorigins.win non disponibile:', err); }
+
+            throw new Error('Impossibile raggiungere Spotify: nessun proxy disponibile in questo momento.');
+        }
+
+        function parseSpotifyTracksFromText(text) {
+            // Pattern osservato sulla pagina embed pubblica: titolo del brano come intestazione
+            // di livello 3, artista subito sotto come intestazione di livello 4, poi la durata mm:ss.
+            const tracks = [];
+            const re = /###\s+([^\n#][^\n]*)\n+####\s+([^\n#][^\n]*)\n+\s*(\d{1,3}:\d{2})/g;
+            let m;
+            while ((m = re.exec(text)) !== null) {
+                tracks.push({ title: m[1].trim(), artist: m[2].trim(), duration: m[3].trim() });
+            }
+            return tracks;
+        }
+
+        function parseSpotifyTracksFromHtml(html) {
+            // Fallback più fragile ma indipendente dal reader esterno: analizza l'HTML grezzo
+            // cercando le coppie di intestazioni h3 (titolo) / h4 (artista) presenti nella riga.
+            try {
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+                const tracks = [];
+                doc.querySelectorAll('h3').forEach(h3 => {
+                    const container = h3.closest('li') || h3.parentElement;
+                    const h4 = container ? container.querySelector('h4') : null;
+                    if (h4) tracks.push({ title: h3.textContent.trim(), artist: h4.textContent.trim(), duration: '' });
+                });
+                return tracks;
+            } catch (err) {
+                console.warn('Parsing HTML playlist fallito:', err);
+                return [];
+            }
+        }
+
+        function extractSpotifyPlaylistCover(text) {
+            const match = text.match(/!\[[^\]]*\]\((https:\/\/[^\)\s]+)\)/);
+            return match ? match[1] : null;
+        }
+
+        async function importSpotifyPlaylist(url) {
+            const resultsStatusText = document.getElementById('resultsStatusText');
+            const playlistId = extractSpotifyPlaylistId(url);
+
+            if (!playlistId) {
+                showResultsView();
+                appState.tracks = []; appState.currentIndex = -1;
+                document.getElementById('trackList').innerHTML = '';
+                if (resultsStatusText) {
+                    resultsStatusText.classList.remove('hidden');
+                    resultsStatusText.innerText = 'Link playlist Spotify non valido.';
+                }
+                return;
+            }
+
+            currentListSource = 'spotify';
+            nextSearchPageToken = '';
+            showResultsView();
+            appState.tracks = []; appState.currentIndex = -1;
+            toggleDownloadButtons(false);
+            document.getElementById('trackList').innerHTML = '';
+            if (resultsStatusText) {
+                resultsStatusText.classList.remove('hidden');
+                resultsStatusText.innerText = 'Importazione playlist Spotify in corso...';
+            }
+
+            try {
+                const fetched = await fetchSpotifyEmbedText(playlistId);
+                let rawTracks = fetched.type === 'text'
+                    ? parseSpotifyTracksFromText(fetched.data)
+                    : parseSpotifyTracksFromHtml(fetched.data);
+
+                if (rawTracks.length === 0) {
+                    throw new Error('Nessun brano trovato: la playlist potrebbe essere privata, vuota o non più raggiungibile.');
+                }
+
+                appState.tracks = rawTracks.map(t => ({
+                    id: null,
+                    title: t.title,
+                    channel: t.artist,
+                    thumbnail: null,
+                    artworkFetched: false,
+                    resolved: false,
+                    spotifyImport: true
+                }));
+                appState.currentIndex = -1;
+
+                if (resultsStatusText) resultsStatusText.classList.add('hidden');
+                renderTracklist(0);
+            } catch (err) {
+                console.warn('Import playlist Spotify fallito:', err);
+                if (resultsStatusText) {
+                    resultsStatusText.classList.remove('hidden');
+                    resultsStatusText.innerHTML = `
+                        <div class="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-center max-w-xs mx-auto">
+                            <i class="fa-brands fa-spotify text-red-500 text-lg mb-2"></i>
+                            <p class="text-xs font-bold text-red-400">Import Spotify non riuscito</p>
+                            <p class="text-[10px] mt-1 custom-text-muted">${escapeHtml(err.message || 'Riprova tra poco.')}</p>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // Copertina per un singolo brano importato da Spotify, tramite l'API pubblica di
+        // iTunes (stessa già usata per le ricerche rapide): nessuna chiave, nessuna quota
+        // YouTube coinvolta. Se il brano viene poi risolto su YouTube (playTrack), la sua
+        // miniatura verrà sostituita da quella del video.
+        async function fetchTrackArtworkFromItunes(track, index) {
+            if (track.id || track.artworkFetched) return;
+            track.artworkFetched = true;
+            const artwork = await fetchArtworkForQuickSearch(`${track.title} ${track.channel}`);
+            if (artwork && !track.id) {
+                track.thumbnail = artwork;
+                const img = document.getElementById(`track-img-${index}`);
+                if (img) img.src = artwork;
+            }
+        }
+
+        // Risolve UN SOLO brano Spotify sul video YouTube corrispondente, e solo quando
+        // l'utente lo tocca davvero per riprodurlo: così una playlist da 100 brani costa
+        // al massimo 1 chiamata di ricerca per ogni brano effettivamente ascoltato, non 100
+        // chiamate subito all'import.
+        async function resolveYoutubeIdForTrack(track, index) {
+            if (!appState.apiKey) {
+                showVisualApiError();
+                const placeholderText = document.getElementById('placeholderText');
+                if (placeholderText) placeholderText.innerHTML = `<span class="text-red-500 font-bold block mb-1">Chiave API Mancante!</span> Clicca sull'icona delle impostazioni in alto a sinistra per configurarla.`;
+                openApiModal();
+                return false;
+            }
+
+            const query = `${track.title} ${track.channel}`;
+            const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q=${encodeURIComponent(query)}&type=video&videoEmbeddable=true&key=${appState.apiKey}`;
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.error) throw new Error(data.error.message);
+                if (!data.items || data.items.length === 0) throw new Error('Nessun video YouTube trovato per questo brano.');
+
+                const item = data.items[0];
+                track.id = item.id.videoId;
+                // Se il brano ha già una copertina iTunes, la manteniamo: sostituirla con
+                // la miniatura YouTube proprio nel momento in cui parte la riproduzione
+                // creava un fastidioso "salto" visivo. La miniatura YouTube resta solo
+                // come ripiego per i brani senza copertina iTunes trovata.
+                if (!track.thumbnail) {
+                    track.thumbnail = item.snippet.thumbnails.high ? item.snippet.thumbnails.high.url : item.snippet.thumbnails.default.url;
+                }
+                track.resolved = true;
+
+                document.getElementById('apiErrorBadge')?.classList.add('hidden');
+                document.getElementById('modalApiBadgeError')?.classList.add('hidden');
+
+                const img = document.getElementById(`track-img-${index}`);
+                if (img) {
+                    if (track.spotifyImport) {
+                        // Copertina fissa (iTunes se trovata, altrimenti il ripiego YouTube
+                        // appena assegnato sopra): niente displayArtwork qui, altrimenti
+                        // verrebbe sovrascritta di nuovo con la miniatura del video.
+                        if (track.thumbnail) img.src = track.thumbnail;
+                    } else {
+                        displayArtwork(img, track.id);
+                    }
+                }
+                const badge = img?.parentElement?.querySelector('.fa-spotify');
+                if (badge) badge.remove();
+
+                return true;
+            } catch (err) {
+                console.warn('Risoluzione YouTube fallita per', track.title, err);
+                showVisualApiError();
+                showToast(`Impossibile trovare "${track.title}" su YouTube.`);
+                return false;
+            }
+        }
+
+        // --- NAVIGAZIONE ANIMATA TRA VISTA PLAYLIST E VISTA LISTA CANZONI ---
+        function showResultsView() {
+            const slider = document.getElementById('viewsSlider');
+            if (!slider || slider.classList.contains('showing-results')) return;
+            slider.classList.add('showing-results');
+            document.getElementById('backToHomeBtn')?.classList.add('visible');
+            document.getElementById('menuButtonsGroup')?.classList.add('shift-right');
+            document.getElementById('headerLeftGroup')?.classList.add('shift-right');
+            window.history.pushState({ page: 'results' }, 'Results');
+        }
+
+        function showHomeView() {
+            const slider = document.getElementById('viewsSlider');
+            if (!slider) return;
+            slider.classList.remove('showing-results');
+            document.getElementById('backToHomeBtn')?.classList.remove('visible');
+            document.getElementById('menuButtonsGroup')?.classList.remove('shift-right');
+            document.getElementById('headerLeftGroup')?.classList.remove('shift-right');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        function renderTracklist(fromIndex = 0) {
+            const trackListDiv = document.getElementById('trackList');
+            const resultsStatusText = document.getElementById('resultsStatusText');
+            if (!trackListDiv) return;
+
+            // Rebuild completo solo per una nuova ricerca (fromIndex 0).
+            // Quando si aggiungono altri risultati (caricamento pagina successiva)
+            // vengono aggiunte SOLO le righe nuove, senza toccare quelle già
+            // renderizzate: prima invece si azzerava e ricreava tutta la lista,
+            // causando il "flash" di tutti i tile (immagini comprese).
+            if (fromIndex === 0) {
+                trackListDiv.innerHTML = '';
+            }
+
+            if (appState.tracks.length === 0) {
+                if (resultsStatusText) {
+                    resultsStatusText.classList.remove('hidden');
+                    resultsStatusText.innerText = 'Nessun risultato.';
+                }
+                return;
+            }
+
+            if (resultsStatusText) resultsStatusText.classList.add('hidden');
+
+            for (let index = fromIndex; index < appState.tracks.length; index++) {
+                const track = appState.tracks[index];
+                const trackRow = document.createElement('div');
+                trackRow.id = `track-row-${index}`;
+                trackRow.className = `track-row-enter flex items-center p-2.5 rounded-2xl cursor-pointer transition-all border hover:bg-white/5 active:bg-white/10 ${appState.currentIndex === index ? 'bg-white/10 border-white/10' : 'border-transparent'}`;
+                // Scaglionato dall'alto verso il basso: ogni riga appare poco dopo la precedente,
+                // così il caricamento (immagini, dati) resta mascherato dall'animazione stessa.
+                trackRow.style.animationDelay = `${Math.min(index - fromIndex, 20) * 45}ms`;
+
+                trackRow.innerHTML = `
+                    <div class="w-14 h-14 rounded-full overflow-hidden mr-3 shadow-md shrink-0 flex items-center justify-center bg-neutral-800 relative">
+                        <img id="track-img-${index}" src="${track.id ? `https://img.youtube.com/vi/${track.id}/mqdefault.jpg` : (track.thumbnail || '')}" class="w-full h-full object-cover track-thumb-img" alt="" onload="this.classList.add('loaded')">
+                        ${!track.id ? '<i class="fa-brands fa-spotify absolute bottom-0.5 right-0.5 text-[10px] text-[var(--accent)] drop-shadow"></i>' : ''}
+                    </div>
+                    <div class="flex-1 overflow-hidden">
+                        <p class="text-sm font-bold truncate ${appState.currentIndex === index ? 'custom-text-accent font-black' : 'text-white'}">${escapeHtml(track.title)}</p>
+                        <p class="text-xs truncate mt-1 custom-text-muted font-medium">${escapeHtml(track.channel)}</p>
+                    </div>
+                `;
+                trackRow.addEventListener('click', () => {
+                    loadTrack(index);
+                });
+                trackListDiv.appendChild(trackRow);
+
+                if (track.id) {
+                    setTimeout(() => {
+                        const img = document.getElementById(`track-img-${index}`);
+                        displayArtwork(img, track.id);
+                    }, 0);
+                } else if (!track.artworkFetched) {
+                    // Copertina per il singolo brano tramite iTunes (gratis, senza chiave, CORS-friendly):
+                    // scaglionata per non sparare decine di richieste tutte insieme all'import.
+                    const delay = Math.min(index - fromIndex, 40) * 90;
+                    setTimeout(() => fetchTrackArtworkFromItunes(track, index), delay);
+                }
+            }
+        }
+
+        async function loadTrack(index) {
+            if (index < 0 || index >= appState.tracks.length) return;
+
+            const track = appState.tracks[index];
+
+            // CARICAMENTO SUCESSIVO PREVENTIVO ED ESCLUSIVO (solo per liste da ricerca YouTube,
+            // le playlist importate da Spotify non hanno paginazione YouTube):
+            // Scatta solo all'inizio dell'ultimo brano della lista (brani 25, 50, etc. - index === appState.tracks.length - 1)
+            if (currentListSource === 'youtube' && index === appState.tracks.length - 1 && nextSearchPageToken && !isFetchingMore) {
+                performSearch(true);
+            }
+
+            // Aggiorna SUBITO titolo, copertina ed evidenziazione riga usando i dati già
+            // disponibili (anche per un brano Spotify non ancora risolto su YouTube), così lo
+            // swipe/cambio brano è istantaneo e non mostra più il titolo del brano precedente
+            // in attesa che finisca la ricerca YouTube.
+            if (appState.currentIndex !== -1 && appState.currentIndex !== index) {
+                const oldRow = document.getElementById(`track-row-${appState.currentIndex}`);
+                if (oldRow) {
+                    oldRow.classList.remove('bg-white/10', 'border-white/10');
+                    oldRow.classList.add('border-transparent');
+                    const oldText = oldRow.querySelector('p.text-sm');
+                    if (oldText) { oldText.classList.remove('custom-text-accent', 'font-black'); oldText.classList.add('text-white'); }
+                }
+            }
+
+            appState.currentIndex = index;
+
+            // Azzeriamo SUBITO barra di avanzamento e tempi: altrimenti resterebbero visibili
+            // quelli della canzone uscente per l'istante in cui il player YouTube sta ancora
+            // caricando il nuovo video (loadVideoById è asincrono).
+            progressBar.style.width = '0%';
+            miniProgressBar.style.width = '0%';
+            document.getElementById('currentTime').innerText = '0:00';
+            document.getElementById('miniCurrentTime').innerText = '0:00';
+            document.getElementById('durationTime').innerText = '0:00';
+            document.getElementById('miniDurationTime').innerText = '0:00';
+
+            const titleEl = document.getElementById('playerTrackTitle');
+            const channelEl = document.getElementById('playerTrackChannel');
+            if (titleEl) titleEl.innerText = track.title;
+            if (channelEl) channelEl.innerText = track.channel;
+
+            if (globalAmbientBg) setAmbientBackground(globalAmbientBg, track.thumbnail);
+            if (sheetAmbientBg) setAmbientBackground(sheetAmbientBg, track.thumbnail);
+
+            const sheetImg = document.getElementById('sheetArtworkImg');
+            const miniImg = document.getElementById('miniPlayerImg');
+            if (track.spotifyImport) {
+                // Copertina iTunes fissa: non va mai sostituita dalla miniatura YouTube,
+                // altrimenti l'immagine "salta" proprio quando parte la canzone.
+                const src = track.thumbnail || (track.id ? `https://img.youtube.com/vi/${track.id}/mqdefault.jpg` : '');
+                if (sheetImg) sheetImg.src = src;
+                if (miniImg) miniImg.src = src;
+            } else if (track.id) {
+                displayArtwork(sheetImg, track.id);
+                displayArtwork(miniImg, track.id);
+            }
+
+            if (miniPlayer) {
+                miniPlayer.classList.add('visible');
+            }
+            document.getElementById('miniPlayerChannel').innerText = track.channel;
+            checkAndApplyMiniMarquee(track.title);
+
+            const newRow = document.getElementById(`track-row-${index}`);
+            if (newRow) {
+                newRow.classList.remove('border-transparent');
+                newRow.classList.add('bg-white/10', 'border-white/10');
+                const newText = newRow.querySelector('p.text-sm');
+                if (newText) { newText.classList.remove('text-white'); newText.classList.add('custom-text-accent', 'font-black'); }
+                newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            checkAndApplyMarquee();
+            toggleDownloadButtons(true);
+
+            // Solo ORA, se manca ancora l'id YouTube (brano da playlist Spotify mai ascoltato
+            // prima), lo risolviamo: l'interfaccia sopra è già aggiornata, quindi questa attesa
+            // non blocca più l'animazione di cambio brano, riguarda solo l'avvio dell'audio.
+            if (!track.id) {
+                const row = document.getElementById(`track-row-${index}`);
+                if (row) row.classList.add('opacity-50', 'pointer-events-none');
+                const resolved = await resolveYoutubeIdForTrack(track, index);
+                if (row) row.classList.remove('opacity-50', 'pointer-events-none');
+
+                // Se nel frattempo l'utente è già passato a un altro brano, non riprodurre
+                // questo (arriverebbe "in ritardo" sopra quello attuale).
+                if (appState.currentIndex !== index) return;
+                if (!resolved) return; // nessun video trovato/errore: non riproduce nulla
+
+                if (track.spotifyImport) {
+                    // Solo se non esisteva già una copertina iTunes: qui track.thumbnail
+                    // è già stato eventualmente valorizzato come ripiego da resolveYoutubeIdForTrack.
+                    const src = track.thumbnail || `https://img.youtube.com/vi/${track.id}/mqdefault.jpg`;
+                    if (sheetImg) sheetImg.src = src;
+                    if (miniImg) miniImg.src = src;
+                } else {
+                    displayArtwork(sheetImg, track.id);
+                    displayArtwork(miniImg, track.id);
+                }
+            }
+
+            if (player?.loadVideoById) player.loadVideoById(track.id);
+            updateMediaSessionMetadata(track);
+        }
+
+        function updateMediaSessionMetadata(track) {
+            if ('mediaSession' in navigator) {
+                // Più risoluzioni = artwork più nitido nei controlli di sistema (notifica, lock screen,
+                // pannello rapido Android): è lì che Android disegna quello che sembra un "widget", perché
+                // un vero home-screen widget non è realizzabile da una webapp/PWA, richiede codice nativo.
+                // Per i brani da Spotify con copertina iTunes, la usiamo anche qui: stessa
+                // immagine ovunque, niente cambio a sorpresa nel lock screen.
+                const artwork = (track.spotifyImport && track.thumbnail)
+                    ? [{ src: track.thumbnail, sizes: '400x400', type: 'image/jpeg' }]
+                    : [
+                        { src: `https://img.youtube.com/vi/${track.id}/mqdefault.jpg`, sizes: '320x180', type: 'image/jpeg' },
+                        { src: `https://img.youtube.com/vi/${track.id}/hqdefault.jpg`, sizes: '480x360', type: 'image/jpeg' },
+                        { src: `https://img.youtube.com/vi/${track.id}/sddefault.jpg`, sizes: '640x480', type: 'image/jpeg' }
+                    ];
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: track.title, artist: track.channel, album: 'YouTubette',
+                    artwork: artwork
+                });
+            }
+        }
+
+        function updateMediaSessionState(isPlaying) {
+            if ('mediaSession' in navigator) navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+        }
+
+        function setupMediaSessionHandlers() {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.setActionHandler('play', togglePlay);
+                navigator.mediaSession.setActionHandler('pause', togglePlay);
+                navigator.mediaSession.setActionHandler('previoustrack', prevTrack);
+                navigator.mediaSession.setActionHandler('nexttrack', nextTrack);
+            }
+        }
+
+        let lastKnownPlayingState = null; // evita di ri-animare l'icona quando YouTube ri-emette
+                                           // "PLAYING" dopo un semplice buffering da scrubbing/seek
+
+        function setPlayIconState(isPlaying) {
+            if (lastKnownPlayingState === isPlaying) return; // stato invariato: nessuna animazione
+            lastKnownPlayingState = isPlaying;
+
+            const targets = [
+                { el: document.getElementById('playIcon'), playCls: 'fa-solid fa-play ml-1', pauseCls: 'fa-solid fa-pause' },
+                { el: document.getElementById('miniPlayIcon'), playCls: 'fa-solid fa-play ml-0.5', pauseCls: 'fa-solid fa-pause' }
+            ];
+            targets.forEach(({ el, playCls, pauseCls }) => {
+                if (!el) return;
+                el.classList.remove('icon-pop');
+                void el.offsetWidth; // forza il reflow: fa ripartire l'animazione ad ogni cambio stato reale
+                el.className = `${isPlaying ? pauseCls : playCls} icon-pop`;
+            });
+        }
+
+        function togglePlay() {
+            if (!player || appState.currentIndex === -1) return;
+            if (appState.isPlaying) player.pauseVideo(); else player.playVideo();
+        }
+
+        function nextTrack() {
+            if (appState.tracks.length === 0) return;
+            let nextIdx = appState.currentIndex + 1;
+            if (nextIdx >= appState.tracks.length) {
+                if (nextSearchPageToken) {
+                    performSearch(true).then(() => { if (appState.tracks[nextIdx]) loadTrack(nextIdx); });
+                } else loadTrack(0);
+            } else {
+                loadTrack(nextIdx);
+            }
+        }
+
+        function prevTrack() {
+            if (appState.tracks.length === 0) return;
+            let prevIdx = appState.currentIndex - 1;
+            if (prevIdx < 0) prevIdx = appState.tracks.length - 1;
+            loadTrack(prevIdx);
+        }
+
+        function startProgressLoop() {
+            setInterval(() => {
+                if (player?.getCurrentTime && appState.isPlaying) {
+                    // Durante il cambio brano il player può rispondere per un istante ancora
+                    // con i dati del video precedente: confrontando l'id effettivamente
+                    // caricato con quello della traccia corrente evitiamo di mostrare quel
+                    // minutaggio "residuo" della canzone uscente.
+                    const currentTrack = appState.tracks[appState.currentIndex];
+                    const activeVideoId = player.getVideoData ? player.getVideoData().video_id : null;
+                    if (!currentTrack || !currentTrack.id || activeVideoId !== currentTrack.id) return;
+
+                    const currentTime = player.getCurrentTime(), duration = player.getDuration();
+                    
+                    if (duration > 0 && !isScrubbing) {
+                        const progressPercent = (currentTime / duration) * 100;
+                        progressBar.style.width = `${progressPercent}%`;
+                        miniProgressBar.style.width = `${progressPercent}%`;
+                        document.getElementById('currentTime').innerText = formatTime(currentTime);
+                        document.getElementById('miniCurrentTime').innerText = formatTime(currentTime);
+                    }
+
+                    if (duration > 0) {
+                        const formattedDuration = formatTime(duration);
+                        if (document.getElementById('durationTime').innerText !== formattedDuration) {
+                            document.getElementById('durationTime').innerText = formattedDuration;
+                            document.getElementById('miniDurationTime').innerText = formattedDuration;
+                        }
+                    }
+                }
+            }, 500);
+        }
+
+        function updateDuration() {
+            if (player?.getDuration) {
+                const totalDuration = player.getDuration();
+                if (totalDuration > 0) {
+                    document.getElementById('durationTime').innerText = formatTime(totalDuration);
+                    document.getElementById('miniDurationTime').innerText = formatTime(totalDuration);
+                }
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60), secs = Math.floor(seconds % 60);
+            return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        }
+
+        function showVisualApiError() {
+            document.getElementById('apiErrorBadge').classList.remove('hidden');
+            document.getElementById('modalApiBadgeError').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
