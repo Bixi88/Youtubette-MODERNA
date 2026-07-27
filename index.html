@@ -930,6 +930,12 @@
 
             document.body.classList.remove('hidden');
             window.history.replaceState({ page: 'main' }, 'Main');
+            // Stato "cuscinetto" extra: senza questo, con una sola entry nello history,
+            // il primo back all'apertura dell'app esce direttamente (il browser non ha
+            // nulla da "pop-are", quindi popstate non parte mai) e il popup "tocca di
+            // nuovo per uscire" non si vede quasi mai. Con due entry, il primo back
+            // consuma sempre questa e fa scattare popstate normalmente.
+            window.history.pushState({ page: 'main' }, 'Main');
             
             window.addEventListener('popstate', (e) => {
                 let handled = false;
@@ -971,7 +977,7 @@
                     }
                     exitOnBackArmed = true;
                     exitOnBackArmedTimeout = setTimeout(() => { exitOnBackArmed = false; }, 2500);
-                    showToast('Tocca di nuovo per uscire');
+                    showExitToast('Tocca di nuovo per uscire');
                     window.history.pushState({ page: 'main' }, 'Main');
                     return;
                 }
@@ -2041,6 +2047,34 @@
             const el = document.createElement('textarea');
             el.innerHTML = text;
             return el.value;
+        }
+
+        // Popup "tocca di nuovo per uscire" in stile Instagram: barra scura quasi a
+        // tutta larghezza, angoli poco arrotondati, appoggiata in fondo allo schermo
+        // (sopra la safe-area), senza icona. Volutamente separata da showToast (usata
+        // per "Link copiato!" ecc.) che resta invariata come pillola centrata più in alto.
+        function showExitToast(message) {
+            const oldToast = document.getElementById('youtubette-exit-toast');
+            if (oldToast) oldToast.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'youtubette-exit-toast';
+            toast.style.bottom = 'calc(14px + env(safe-area-inset-bottom, 0px))';
+            toast.className = 'fixed left-3 right-3 font-medium text-sm py-3 px-4 rounded-lg shadow-2xl z-[150] transition-all duration-300 opacity-0 translate-y-2 bg-black/85 text-white text-center';
+            toast.textContent = message;
+
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-0', 'translate-y-2');
+                toast.classList.add('opacity-100', 'translate-y-0');
+            }, 50);
+
+            setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
         }
 
         function showToast(message) {
