@@ -6,6 +6,13 @@
 // non per i normali aggiornamenti di index.html.
 const CACHE_NAME = 'youtubette-cache';
 
+// Cache separata per le immagini (thumbnail YouTube, artwork iTunes): a
+// differenza della cache dell'app shell, questa non va mai svuotata negli
+// aggiornamenti di versione, cresce nel tempo e viene autolimitata (vedi
+// trimArtworkCache) invece che ricreata da zero.
+const ARTWORK_CACHE_NAME = 'youtubette-artwork-cache';
+const MAX_ARTWORK_ENTRIES = 400; // limite soft: qualche MB, cresce piano e si autolimita
+
 const ASSETS = [
   './',
   './index.html',
@@ -14,12 +21,13 @@ const ASSETS = [
   './512x512.png'
 ];
 
-// Domini che NON vanno mai serviti dalla cache (API dinamiche)
+// Domini di API dinamiche: mai in cache, sempre rete diretta, per evitare
+// risultati di ricerca "vecchi". NB: ytimg.com/ggpht.com NON sono qui: sono
+// CDN di sole immagini (thumbnail/avatar), gestite dal ramo cache-first
+// per le immagini qui sotto, non da questa blocklist.
 const NEVER_CACHE_HOSTS = [
   'googleapis.com',
-  'youtube.com',
-  'ytimg.com',
-  'ggpht.com'
+  'youtube.com'
 ];
 
 self.addEventListener('install', (e) => {
@@ -38,12 +46,25 @@ self.addEventListener('activate', (e) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== CACHE_NAME)
+          .filter((key) => key !== CACHE_NAME && key !== ARTWORK_CACHE_NAME)
           .map((key) => caches.delete(key))
       )
     ).then(() => self.clients.claim())
   );
 });
+
+/** Tiene la cache artwork sotto MAX_ARTWORK_ENTRIES, eliminando le voci più
+ * vecchie (cache.keys() rispetta l'ordine di inserimento). Girare questo ad
+ * ogni scrittura è più semplice di una vera LRU e sufficiente per un uso
+ * personale: la cache non cresce mai illimitata. */
+async function trimArtworkCache(cache) {
+  const keys = await cache.keys();
+  const excess = keys.length - MAX_ARTWORK_ENTRIES;
+  if (excess <= 0) return;
+  for (let i = 0; i < excess; i++) {
+    await cache.delete(keys[i]);
+  }
+}
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
@@ -51,6 +72,32 @@ self.addEventListener('fetch', (e) => {
 
   // Solo richieste GET possono essere gestite dalla cache
   if (req.method !== 'GET') return;
+
+  // Immagini (thumbnail YouTube, artwork iTunes, avatar canale...):
+  // cache-first. Controllato per PRIMA di NEVER_CACHE_HOSTS così le
+  // thumbnail su ytimg.com/ggpht.com finiscono qui e non nel bypass a rete
+  // diretta pensato per le vere API dinamiche. Una volta vista una canzone
+  // o un video, la sua immagine resta salvata sul device: niente più flash
+  // grigio né richieste di rete ripetute per contenuti già incontrati.
+  if (req.destination === 'image') {
+    e.respondWith(
+      caches.open(ARTWORK_CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(req);
+        if (cached) return cached;
+        try {
+          const res = await fetch(req);
+          if (res.ok) {
+            cache.put(req, res.clone());
+            trimArtworkCache(cache);
+          }
+          return res;
+        } catch (err) {
+          return cached || Response.error();
+        }
+      })
+    );
+    return;
+  }
 
   // Mai intercettare le chiamate verso YouTube/Google API: sempre rete diretta,
   // niente cache, per evitare risultati di ricerca "vecchi".
