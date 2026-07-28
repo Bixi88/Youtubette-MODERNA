@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="color-scheme" content="dark">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>YouTubette - Player</title>
 
     <!-- Stile critico: definito PRIMA di script/link esterni (Tailwind CDN, Font Awesome)
@@ -50,6 +50,18 @@
            comparisse sempre. Definendola già qui, subito, non dipende più dai tempi
            del CDN. */
         .hidden { display: none !important; }
+
+        /* Edge-to-edge (Android 15+, viewport-fit=cover): il contenuto puo' ora
+           disegnarsi dietro la status bar di sistema invece che affidarsi (in
+           modo inaffidabile, specie nelle PWA installate) alla colorazione via
+           theme-color. Estendiamo qui lo sfondo dietro l'area della status bar
+           e spingiamo giu' l'header col padding, cosi' che sotto la status bar
+           si veda comunque il gradiente dell'app e non un bordo/vuoto bianco.
+           !important necessario per vincere su p-4 di Tailwind, che viene
+           iniettato dopo questo blocco. */
+        body.custom-bg-main {
+            padding-top: max(1rem, env(safe-area-inset-top, 0px)) !important;
+        }
     </style>
 
     <link rel="manifest" href="manifest.json">
