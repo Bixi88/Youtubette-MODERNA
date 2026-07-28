@@ -19,14 +19,17 @@
            ink-3      #221E27  — input/superfici ancora più elevate
            paper      #F3EFE6  — testo primario
            mute       #8B8794  — testo secondario
-           signal     #FFB13C  — UNICO accento: ambra/marigold
+           signal     #FF9A21  — UNICO accento: arancione
+           bg-grad    #1D164A → #000000 — gradiente viola/nero dello sfondo
            ============================================================ */
         :root {
             color-scheme: dark;
             --bg-main: #000000;
+            --bg-gradient-top: #1D164A;
+            --bg-gradient: linear-gradient(180deg, var(--bg-gradient-top) 0%, var(--bg-main) 70%);
             --bg-card: rgba(24, 21, 28, 0.72);
             --bg-input: #221E27;
-            --accent: #FFB13C;
+            --accent: #FF9A21;
             --text-main: #F3EFE6;
             --text-muted: #8B8794;
         }
@@ -36,7 +39,7 @@
             top: 0; left: 0; right: 0; bottom: 0;
             width: 100%; height: 100%;
             overflow: hidden;
-            background-color: var(--bg-main);
+            background: var(--bg-gradient);
             color: var(--text-main);
         }
 
@@ -54,8 +57,8 @@
     <link rel="apple-touch-icon" href="192x192.png">
     
     <!-- Meta Theme Color multipli per Firefox ed Android -->
-    <meta name="theme-color" content="#000000" id="metaThemeColor">
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
+    <meta name="theme-color" content="#1D164A" id="metaThemeColor">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1D164A">
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-menu-bar-style" content="black-translucent">
@@ -151,7 +154,7 @@
             z-index: 100;
             transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
             will-change: transform;
-            background-color: var(--bg-main);
+            background: var(--bg-gradient);
             overflow: hidden;
         }
         #nowPlayingSheet.expanded {
@@ -245,7 +248,7 @@
             opacity: 1;
         }
 
-        .custom-bg-main { background-color: var(--bg-main); }
+        .custom-bg-main { background: var(--bg-gradient); }
         .custom-bg-card { background: var(--bg-card); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
         .custom-bg-input { background-color: var(--bg-input); }
         .custom-text-accent { color: var(--accent); }
