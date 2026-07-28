@@ -649,11 +649,18 @@
             
             <div class="mb-2">
                 <div class="flex items-center justify-between mb-2">
-                    <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted">YouTube API Key</label>
+                    <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted">YouTube API Key (primaria)</label>
                     <span id="modalApiBadgeError" class="hidden text-[10px] font-bold text-red-500 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full animate-pulse">Chiave Non Valida</span>
                 </div>
                 <input type="text" id="modalApiKeyInput" placeholder="Incolla qui la tua chiave API..." 
                     class="w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
+            </div>
+
+            <div class="mb-2 mt-4">
+                <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted mb-2">YouTube API Key (secondaria)</label>
+                <input type="text" id="modalApiKeyInput2" placeholder="Opzionale: usata solo se la primaria finisce la quota..." 
+                    class="w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
+                <p class="text-[10px] mt-1.5 custom-text-muted">Ordine: prima la chiave primaria, poi la secondaria se la prima esaurisce la quota, infine un fallback automatico senza chiave.</p>
             </div>
 
             <div class="mt-6 border-t border-white/5 pt-4">
@@ -674,6 +681,7 @@
         // fissi, definiti nel token system CSS in testa al documento.
         let appState = {
             apiKey: localStorage.getItem('youtubette_api_key') || '',
+            apiKey2: localStorage.getItem('youtubette_api_key_2') || '',
             tracks: [],
             currentIndex: -1,
             isPlaying: false,
@@ -1807,8 +1815,10 @@
         function openApiModal() {
             const modal = document.getElementById('apiModal');
             const input = document.getElementById('modalApiKeyInput');
+            const input2 = document.getElementById('modalApiKeyInput2');
             if (modal && input) {
                 input.value = appState.apiKey;
+                if (input2) input2.value = appState.apiKey2;
                 modal.classList.add('active');
                 renderSettingsPlaylistList();
             }
@@ -1821,8 +1831,11 @@
 
         function saveSettingsFromModal() {
             const key = document.getElementById('modalApiKeyInput').value.trim();
+            const key2 = document.getElementById('modalApiKeyInput2')?.value.trim() || '';
             appState.apiKey = key;
+            appState.apiKey2 = key2;
             localStorage.setItem('youtubette_api_key', key);
+            localStorage.setItem('youtubette_api_key_2', key2);
 
             document.getElementById('apiErrorBadge')?.classList.add('hidden');
             document.getElementById('modalApiBadgeError').classList.add('hidden');
@@ -2191,17 +2204,69 @@
             return now.toISOString();
         }
 
+        // URL del Cloudflare Worker di backup (terzo livello, senza API key ufficiale).
+        // Sostituisci con l'URL del tuo worker una volta deployato.
+        const YT_FALLBACK_WORKER_URL = 'https://youtubette-search-proxy.bix20252025.workers.dev';
+
+        function isQuotaError(data) {
+            const reason = data?.error?.errors?.[0]?.reason || '';
+            return reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' || reason === 'rateLimitExceeded';
+        }
+
+        function buildGoogleApiUrl(key, params) {
+            let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&key=${key}`;
+            if (params.q) url += `&q=${encodeURIComponent(params.q)}`;
+            if (params.maxResults) url += `&maxResults=${params.maxResults}`;
+            if (params.videoDuration) url += `&videoDuration=${params.videoDuration}`;
+            if (params.publishedAfter) url += `&publishedAfter=${encodeURIComponent(params.publishedAfter)}`;
+            if (params.pageToken) url += `&pageToken=${params.pageToken}`;
+            return url;
+        }
+
+        // Prova in ordine: chiave API primaria -> chiave API secondaria (solo se la
+        // prima ha esaurito la quota o manca) -> Worker di backup senza API ufficiale.
+        // Le prime due tornano il JSON nel formato ufficiale della YouTube Data API v3;
+        // anche il Worker di backup lo restituisce già normalizzato nello stesso formato
+        // (items[].id.videoId, items[].snippet.title/channelTitle/thumbnails, nextPageToken),
+        // così le funzioni chiamanti non devono sapere quale delle tre fonti ha risposto.
+        async function youtubeSearch(params) {
+            const keys = [appState.apiKey, appState.apiKey2].filter(Boolean);
+
+            for (const key of keys) {
+                try {
+                    const res = await fetch(buildGoogleApiUrl(key, params));
+                    const data = await res.json();
+                    if (!data.error) return data;
+                    console.warn(isQuotaError(data)
+                        ? 'Quota YouTube esaurita per una chiave, provo la successiva...'
+                        : 'Chiave YouTube non valida o errore API:', data.error.message);
+                } catch (err) {
+                    console.warn('Chiamata alla YouTube API fallita:', err);
+                }
+            }
+
+            // Terzo tentativo: Worker di backup, nessuna chiave richiesta.
+            try {
+                let url = `${YT_FALLBACK_WORKER_URL}/search?q=${encodeURIComponent(params.q || '')}`;
+                if (params.maxResults) url += `&maxResults=${params.maxResults}`;
+                if (params.pageToken) url += `&pageToken=${encodeURIComponent(params.pageToken)}`;
+                if (params.videoDuration) url += `&videoDuration=${params.videoDuration}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                return data; // già normalizzato: {items:[...], nextPageToken}
+            } catch (err) {
+                console.warn('Anche il Worker di backup ha fallito:', err);
+            }
+
+            return null; // tutte e tre le fonti hanno fallito
+        }
+
         async function performSearch(isLoadMore = false) {
             const query = searchInput.value.trim();
             const resultsStatusText = document.getElementById('resultsStatusText');
             
             if (!query || (isLoadMore && isFetchingMore)) return;
-
-            if (!appState.apiKey) { 
-                showVisualApiError();
-                openApiModal(); 
-                return; 
-            }
 
             if (!isLoadMore) {
                 currentListSource = 'youtube';
@@ -2216,23 +2281,16 @@
                 const activeFilterDate = appState.filterDate;
                 const activeFilterDuration = appState.filterDuration;
 
-                let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=25&q=${encodeURIComponent(query)}&type=video&videoEmbeddable=true&key=${appState.apiKey}`;
-                
-                if (activeFilterDuration !== 'any') {
-                    url += `&videoDuration=${activeFilterDuration}`;
-                }
+                const params = { q: query, maxResults: 25 };
+                if (activeFilterDuration !== 'any') params.videoDuration = activeFilterDuration;
                 const publishedAfter = getPublishedAfterDate(activeFilterDate);
-                if (publishedAfter) {
-                    url += `&publishedAfter=${encodeURIComponent(publishedAfter)}`;
-                }
+                if (publishedAfter) params.publishedAfter = publishedAfter;
+                if (nextSearchPageToken) params.pageToken = nextSearchPageToken;
 
-                if (nextSearchPageToken) url += `&pageToken=${nextSearchPageToken}`;
+                const data = await youtubeSearch(params);
 
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                if (data.error) {
-                    throw new Error(data.error.message);
+                if (!data) {
+                    throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
                 }
 
                 document.getElementById('apiErrorBadge')?.classList.add('hidden');
@@ -2256,8 +2314,8 @@
                     resultsStatusText.innerHTML = `
                         <div class="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-center max-w-xs mx-auto">
                             <i class="fa-solid fa-triangle-exclamation text-red-500 text-lg mb-2"></i>
-                            <p class="text-xs font-bold text-red-400">Errore API di YouTube</p>
-                            <p class="text-[10px] mt-1 custom-text-muted">La tua chiave API potrebbe essere non valida o scaduta.</p>
+                            <p class="text-xs font-bold text-red-400">Ricerca YouTube non disponibile</p>
+                            <p class="text-[10px] mt-1 custom-text-muted">Chiavi API non valide o quota esaurita, e anche il fallback di backup non ha risposto.</p>
                         </div>
                     `;
                 }
@@ -2505,19 +2563,11 @@
         // al massimo 1 chiamata di ricerca per ogni brano effettivamente ascoltato, non 100
         // chiamate subito all'import.
         async function resolveYoutubeIdForTrack(track, index) {
-            if (!appState.apiKey) {
-                showVisualApiError();
-                openApiModal();
-                return false;
-            }
-
             const query = `${track.title} ${track.channel}`;
-            const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=1&q=${encodeURIComponent(query)}&type=video&videoEmbeddable=true&key=${appState.apiKey}`;
 
             try {
-                const res = await fetch(url);
-                const data = await res.json();
-                if (data.error) throw new Error(data.error.message);
+                const data = await youtubeSearch({ q: query, maxResults: 1 });
+                if (!data) throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
                 if (!data.items || data.items.length === 0) throw new Error('Nessun video YouTube trovato per questo brano.');
 
                 const item = data.items[0];
