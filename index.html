@@ -1196,7 +1196,6 @@
             })();
             document.getElementById('modalCancelBtn').addEventListener('click', () => {
                 closeApiModal();
-                window.history.back();
             });
             document.getElementById('modalSaveBtn').addEventListener('click', saveSettingsFromModal);
 
@@ -1204,7 +1203,6 @@
             document.getElementById('apiModal').addEventListener('click', (e) => {
                 if (e.target.id === 'apiModal') {
                     closeApiModal();
-                    window.history.back();
                 }
             });
 
@@ -1250,10 +1248,17 @@
             nowPlayingSheet.style.transform = `translate3d(0, ${startPercent}%, 0)`;
             void nowPlayingSheet.offsetHeight;
             nowPlayingSheet.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-            nowPlayingSheet.classList.remove('expanded');
-            nowPlayingSheet.style.transform = '';
+            // La rimozione vera e propria della classe 'expanded' viene lasciata al
+            // gestore di popstate qui sotto (che la fa già): se la rimuovessimo già ora,
+            // quando popstate scatta (sempre, anche per una chiusura "manuale" via
+            // pulsante/swipe) non troverebbe più nulla da chiudere e scambierebbe
+            // l'azione per un back "a vuoto" premuto dalla home, facendo comparire per
+            // errore il popup "tocca di nuovo per uscire".
             if (window.history.state && window.history.state.page === 'sheet') {
                 window.history.back();
+            } else {
+                nowPlayingSheet.classList.remove('expanded');
+                nowPlayingSheet.style.transform = '';
             }
         }
 
@@ -1357,7 +1362,6 @@
                     if (Math.abs(currentX) > 80) {
                         hapticFeedback();
                         closeApiModal();
-                        window.history.back();
                     }
                 }
                 isClosingDrag = false;
@@ -1829,7 +1833,18 @@
 
         function closeApiModal() {
             const modal = document.getElementById('apiModal');
-            if (modal) modal.classList.remove('active');
+            if (!modal) return;
+            // Come in closeNowPlayingSheet(): se c'è uno stato 'modal' nello history,
+            // lasciamo che sia il gestore di popstate a rimuovere la classe 'active'.
+            // Rimuoverla già qui farebbe scattare per errore il popup "tocca di nuovo
+            // per uscire" al successivo back, perché popstate non troverebbe più nulla
+            // da chiudere e scambierebbe questa chiusura manuale per un back a vuoto
+            // premuto dalla home.
+            if (window.history.state && window.history.state.page === 'modal') {
+                window.history.back();
+            } else {
+                modal.classList.remove('active');
+            }
         }
 
         function saveSettingsFromModal() {
@@ -1849,7 +1864,6 @@
             setTimeout(() => {
                 saveBtn.innerHTML = "Salva";
                 closeApiModal();
-                window.history.back();
             }, 800);
         }
 
