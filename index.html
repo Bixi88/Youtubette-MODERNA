@@ -419,6 +419,22 @@
         .empty-home i { font-size:26px; color:var(--text-muted); opacity:.6; }
         .empty-home p { font-size:13.5px; color:var(--text-muted); margin:0; line-height:1.5; }
 
+        /* ================= HOME: sezione "Ascoltati di recente" (cronologia) ================= */
+        .history-header { display:flex; align-items:center; justify-content:space-between; padding:22px 6px 4px; }
+        .history-header .quick-eyebrow { padding:0; }
+        .history-see-all { background:none; border:none; padding:4px 2px; font-size:12.5px; font-weight:700; color:var(--accent); cursor:pointer; }
+        .history-see-all:active { opacity:.6; }
+        .history-list { display:flex; flex-direction:column; gap:10px; padding:14px 2px 20px; }
+        .history-row { display:flex; align-items:center; gap:12px; padding:8px 10px; border-radius:18px; background:var(--bg-input); cursor:pointer; transition:transform .15s ease; }
+        .history-row:active { transform:scale(0.97); }
+        .history-row .thumb { width:46px; height:46px; border-radius:24%; overflow:hidden; flex-shrink:0; background-color:rgba(255,255,255,.06); }
+        .history-row .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
+        .history-row .info { flex:1; min-width:0; }
+        .history-row .info .title { font-size:14px; font-weight:700; color:var(--text-main); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .history-row .info .subtitle { font-size:12px; font-weight:500; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+        .history-row .more-btn { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; color:var(--text-muted); background:none; border:none; flex-shrink:0; font-size:14px; }
+        .history-row .more-btn:active { background:rgba(255,255,255,.08); }
+
         /* ================= RISULTATI: righe con divisore (niente più pillole piene) ================= */
         .track-row { position:relative; }
         .track-row .text-sm { font-size:15px; }
@@ -521,6 +537,13 @@
                     <div id="emptyHome" class="empty-home">
                         <i class="fa-solid fa-magnifying-glass"></i>
                         <p>Usa la barra di ricerca in alto per cercare brani, oppure incolla il link di una playlist Spotify.<br>Le tue ultime ricerche appariranno qui.</p>
+                    </div>
+                    <div id="historyHomeSection" class="hidden">
+                        <div class="history-header">
+                            <div class="quick-eyebrow">Ascoltati di recente</div>
+                            <button id="viewAllHistoryBtn" class="history-see-all">Vedi tutti</button>
+                        </div>
+                        <div id="historyList" class="history-list"></div>
                     </div>
                 </div>
                 <!-- VISTA 2: Lista Canzoni (risultati ricerca / playlist aperta) -->
@@ -767,7 +790,7 @@
         // Delega globale: fa vibrare al click/tap di qualunque pulsante o elemento cliccabile,
         // senza dover aggiungere una chiamata manuale ad ogni singolo handler esistente.
         document.addEventListener('click', (e) => {
-            if (e.target.closest('button, [role="button"], .track-row, .qcard, .settings-playlist-row, .settings-playlist-remove')) {
+            if (e.target.closest('button, [role="button"], .track-row, .qcard, .settings-playlist-row, .settings-playlist-remove, .history-row')) {
                 hapticFeedback();
             }
         }, true);
@@ -935,6 +958,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             setupFilterDropdowns();
             renderRecentHome();
+            renderHistoryHome();
 
             document.body.classList.remove('hidden');
             window.history.replaceState({ page: 'main' }, 'Main');
@@ -1120,6 +1144,9 @@
             });
             document.getElementById('backToHomeBtn').addEventListener('click', () => {
                 window.history.back();
+            });
+            document.getElementById('viewAllHistoryBtn')?.addEventListener('click', () => {
+                openFullHistory();
             });
 
             // --- SWIPE (destra -> sinistra) SULLA VISTA PLAYLIST PER RIAPRIRE LA LISTA CANZONI ATTIVA ---
@@ -2035,6 +2062,133 @@
             }
         }
 
+        // --- HOME: "Ascoltati di recente" (cronologia di riproduzione) ---
+        // Cache separata dai "Recenti" sopra (che mischiano ricerche digitate e playlist
+        // incollate): qui finiscono SOLO i brani davvero mandati in riproduzione, con
+        // l'id YouTube ormai risolto, cosi da poter ripartire all'istante sia dall'anteprima
+        // in home sia dalla vista "Vedi tutti" dedicata. Salvata in localStorage.
+        const HISTORY_STORAGE_KEY = 'youtubette_history';
+        const HISTORY_HOME_PREVIEW = 4;
+        const HISTORY_MAX = 50;
+
+        function loadHistoryItems() {
+            try {
+                const raw = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY));
+                return Array.isArray(raw) ? raw : [];
+            } catch (err) {
+                return [];
+            }
+        }
+
+        function saveHistoryItems(items) {
+            try {
+                localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(items));
+            } catch (err) {
+                console.warn('Impossibile salvare la cronologia ascolti:', err);
+            }
+        }
+
+        // Converte una voce di cronologia salvata in un "track" riproducibile dalla lista.
+        function historyItemToTrack(it) {
+            return { id: it.id, title: it.title, channel: it.channel, thumbnail: it.thumbnail, spotifyImport: it.spotifyImport };
+        }
+
+        // Aggiunge (o riporta in cima, se già presente) un brano alla cronologia.
+        // Va chiamata solo quando il brano ha già un id YouTube valido e risolto.
+        function addHistoryItem(track) {
+            if (!track || !track.id) return;
+            let items = loadHistoryItems().filter(it => it.id !== track.id);
+            items.unshift({
+                id: track.id,
+                title: track.title,
+                channel: track.channel,
+                thumbnail: track.thumbnail || `https://img.youtube.com/vi/${track.id}/mqdefault.jpg`,
+                spotifyImport: !!track.spotifyImport,
+                ts: Date.now()
+            });
+            items = items.slice(0, HISTORY_MAX);
+            saveHistoryItems(items);
+            renderHistoryHome();
+        }
+
+        // Rimuove un brano dalla cronologia (usata dal pulsante "..." di ogni riga).
+        function removeHistoryItem(id) {
+            const items = loadHistoryItems().filter(it => it.id !== id);
+            saveHistoryItems(items);
+            renderHistoryHome();
+            // Se la vista "Vedi tutti" è aperta in quel momento, la teniamo allineata.
+            if (currentListSource === 'history') {
+                appState.tracks = items.map(historyItemToTrack);
+                renderTracklist(0);
+            }
+        }
+
+        function renderHistoryHome() {
+            const section = document.getElementById('historyHomeSection');
+            const list = document.getElementById('historyList');
+            if (!section || !list) return;
+
+            const items = loadHistoryItems();
+            if (items.length === 0) {
+                section.classList.add('hidden');
+                list.innerHTML = '';
+                return;
+            }
+            section.classList.remove('hidden');
+
+            const preview = items.slice(0, HISTORY_HOME_PREVIEW);
+            list.innerHTML = preview.map(it => `
+                <div class="history-row" data-id="${it.id}">
+                    <div class="thumb"><img src="${it.thumbnail}" alt="" loading="lazy"></div>
+                    <div class="info">
+                        <p class="title">${escapeHtml(it.title)}</p>
+                        <p class="subtitle">${escapeHtml(it.channel)}</p>
+                    </div>
+                    <button class="more-btn" title="Rimuovi dalla cronologia">
+                        <i class="fa-solid fa-ellipsis-vertical"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            list.querySelectorAll('.history-row').forEach(row => {
+                const id = row.dataset.id;
+                row.addEventListener('click', (e) => {
+                    if (e.target.closest('.more-btn')) return;
+                    const item = loadHistoryItems().find(it => it.id === id);
+                    openHistoryTrack(item);
+                });
+                row.querySelector('.more-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeHistoryItem(id);
+                });
+            });
+        }
+
+        // Riproduce subito un brano toccato dall'anteprima "Ascoltati di recente" in home.
+        function openHistoryTrack(item) {
+            if (!item) return;
+            currentListSource = 'history';
+            appState.tracks = [historyItemToTrack(item)];
+            appState.currentIndex = -1;
+            nextSearchPageToken = '';
+            toggleDownloadButtons(true);
+            loadTrack(0);
+            openNowPlayingSheetWhenArtworkReady();
+        }
+
+        // Apre la vista "Vedi tutti": stessa lista/vista usata per risultati e playlist,
+        // qui popolata con l'intera cronologia degli ascolti.
+        function openFullHistory() {
+            const items = loadHistoryItems();
+            if (items.length === 0) return;
+            currentListSource = 'history';
+            appState.tracks = items.map(historyItemToTrack);
+            appState.currentIndex = -1;
+            nextSearchPageToken = '';
+            renderTracklist(0);
+            showResultsView('Ascoltati di recente');
+        }
+
         async function redirectToDownload() {
             if (appState.currentIndex === -1) return;
             const currentTrack = appState.tracks[appState.currentIndex];
@@ -2841,6 +2995,11 @@
                     displayArtwork(miniImg, track.id);
                 }
             }
+
+            // Cronologia "Ascoltati di recente": registrata solo qui, quando il brano ha
+            // ormai sicuramente un id YouTube valido (che sia partito già risolto o
+            // appena risolto sopra da una playlist Spotify), pronto a essere riprodotto.
+            addHistoryItem(track);
 
             if (player?.loadVideoById) player.loadVideoById(track.id);
             updateMediaSessionMetadata(track);
