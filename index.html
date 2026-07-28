@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="color-scheme" content="dark">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>YouTubette - Player</title>
 
     <!-- Stile critico: definito PRIMA di script/link esterni (Tailwind CDN, Font Awesome)
@@ -20,12 +20,12 @@
            paper      #F3EFE6  — testo primario
            mute       #8B8794  — testo secondario
            signal     #FF9A21  — UNICO accento: arancione
-           bg-grad    #1D164A → #000000 — gradiente viola/nero dello sfondo
+           bg-grad    #FF0000 → #000000 — gradiente viola/nero dello sfondo
            ============================================================ */
         :root {
             color-scheme: dark;
             --bg-main: #000000;
-            --bg-gradient-top: #1D164A;
+            --bg-gradient-top: #FF0000;
             --bg-gradient: linear-gradient(180deg, var(--bg-gradient-top) 0%, var(--bg-main) 70%);
             --bg-card: rgba(24, 21, 28, 0.72);
             --bg-input: #221E27;
@@ -50,18 +50,6 @@
            comparisse sempre. Definendola già qui, subito, non dipende più dai tempi
            del CDN. */
         .hidden { display: none !important; }
-
-        /* Edge-to-edge (Android 15+, viewport-fit=cover): il contenuto puo' ora
-           disegnarsi dietro la status bar di sistema invece che affidarsi (in
-           modo inaffidabile, specie nelle PWA installate) alla colorazione via
-           theme-color. Estendiamo qui lo sfondo dietro l'area della status bar
-           e spingiamo giu' l'header col padding, cosi' che sotto la status bar
-           si veda comunque il gradiente dell'app e non un bordo/vuoto bianco.
-           !important necessario per vincere su p-4 di Tailwind, che viene
-           iniettato dopo questo blocco. */
-        body.custom-bg-main {
-            padding-top: max(1rem, env(safe-area-inset-top, 0px)) !important;
-        }
     </style>
 
     <link rel="manifest" href="manifest.json">
@@ -69,8 +57,8 @@
     <link rel="apple-touch-icon" href="192x192.png">
     
     <!-- Meta Theme Color multipli per Firefox ed Android -->
-    <meta name="theme-color" content="#1D164A" id="metaThemeColor">
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1D164A">
+    <meta name="theme-color" content="#FF0000" id="metaThemeColor">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#FF0000">
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-menu-bar-style" content="black-translucent">
