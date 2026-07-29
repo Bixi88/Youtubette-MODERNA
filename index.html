@@ -2409,6 +2409,42 @@
             return { items, continuation: nextContinuation };
         }
 
+        // Controllo incorporabilità via oEmbed pubblico di YouTube (nessuna chiave,
+        // CORS-friendly perché pensato apposta per essere chiamato da siti terzi che
+        // vogliono incorporare un video). Se il proprietario ha disattivato l'embedding
+        // altrove, questo endpoint risponde 401/403: è lo stesso controllo che la Data
+        // API garantiva con "videoEmbeddable=true" e che qui mancava - causa più
+        // probabile dei tanti video che, una volta scelti, restavano senza audio (frequente
+        // nei video musicali "ufficiali"/major label, che spesso bloccano l'embedding).
+        async function isVideoEmbeddable(videoId) {
+            try {
+                const url = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`;
+                const res = await fetch(url);
+                if (res.status === 401 || res.status === 403) return false;
+                return true;
+            } catch (err) {
+                // Richiesta bloccata per motivi di rete/CORS: non possiamo saperlo con
+                // certezza, meglio non scartare il video per un problema che non c'entra
+                // con l'embedding.
+                return true;
+            }
+        }
+
+        async function filterEmbeddable(tracks) {
+            if (tracks.length === 0) return tracks;
+            const CONCURRENCY = 6;
+            const ok = new Array(tracks.length);
+            let i = 0;
+            async function worker() {
+                while (i < tracks.length) {
+                    const idx = i++;
+                    ok[idx] = await isVideoEmbeddable(tracks[idx].id.videoId);
+                }
+            }
+            await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tracks.length) }, worker));
+            return tracks.filter((_, idx) => ok[idx]);
+        }
+
         // Punto d'ingresso unico usato da performSearch: stesso formato di ritorno di
         // prima ({items, nextPageToken}), così il resto del codice non cambia.
         async function youtubeSearch(params) {
@@ -2420,20 +2456,22 @@
                     ({ items, continuation } = await youtubeSearchFirstPage(params.q));
                 }
 
-                const mapAndFilter = raw => {
+                const mapAndFilter = async raw => {
                     let mapped = raw.map(videoRendererToItem).filter(Boolean);
                     if (params.videoDuration) mapped = mapped.filter(t => matchesDurationFilter(t._lengthSeconds, params.videoDuration));
+                    mapped = await filterEmbeddable(mapped);
                     return mapped;
                 };
 
-                let tracks = mapAndFilter(items);
+                let tracks = await mapAndFilter(items);
 
                 // La prima sezione della pagina pubblica (o una singola pagina di
-                // continuazione) contiene tipicamente 18-20 video, meno se poi si filtra
-                // per durata: invece di restituire una lista corta, incateniamo altre
-                // pagine di continuazione finché non si raggiunge il numero richiesto,
-                // la ricerca si esaurisce, o si supera un tetto di sicurezza (evita di
-                // sparare troppe richieste per una ricerca di nicchia con pochi risultati).
+                // continuazione) contiene tipicamente 18-20 video, molti meno dopo il
+                // filtro durata e ora anche dopo il filtro incorporabilità: invece di
+                // restituire una lista corta, incateniamo altre pagine di continuazione
+                // finché non si raggiunge il numero richiesto, la ricerca si esaurisce,
+                // o si supera un tetto di sicurezza (evita di sparare troppe richieste
+                // per una ricerca di nicchia con pochi risultati validi).
                 const wanted = params.maxResults || tracks.length;
                 const MAX_EXTRA_PAGES = 6;
                 let extraPages = 0;
@@ -2441,7 +2479,7 @@
                     extraPages++;
                     const more = await youtubeSearchContinuation(continuation);
                     continuation = more.continuation;
-                    tracks = tracks.concat(mapAndFilter(more.items));
+                    tracks = tracks.concat(await mapAndFilter(more.items));
                 }
                 // Nota: il filtro per data di pubblicazione (publishedAfter) non è applicato
                 // qui: la pagina pubblica riporta solo un testo relativo ("2 settimane fa"),
