@@ -2279,7 +2279,7 @@
             url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`
         ];
 
-        async function fetchViaScrapeProxies(targetUrl, options, validate = () => true) {
+        async function fetchViaScrapeProxies(targetUrl, options, parse = text => text) {
             let lastErr = null;
             for (const buildProxyUrl of YT_SCRAPE_PROXIES) {
                 // Due tentativi per proxy: un fallimento di rete può essere solo momentaneo
@@ -2290,10 +2290,16 @@
                         if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
                         const text = await res.text();
                         // Un proxy con server in UE può far comparire a YouTube la pagina di
-                        // consenso cookie invece dei risultati veri: risponde comunque 200,
-                        // quindi va validato il contenuto, non solo lo status HTTP.
-                        if (validate(text)) return text;
-                        lastErr = new Error('Risposta non valida (probabile pagina di consenso cookie).');
+                        // consenso cookie invece dei risultati veri (risponde comunque 200), e
+                        // un proxy che tronca risposte grandi (la pagina risultati di YouTube è
+                        // pesante) può lasciare la stringa "ytInitialData" nel testo pur avendo
+                        // un JSON incompleto. Per questo la validazione fa il parsing vero e
+                        // proprio, non un controllo superficiale: solo se il parse riesce
+                        // davvero la risposta viene accettata, altrimenti si scarta e si
+                        // riprova con il proxy successivo.
+                        const parsed = parse(text);
+                        if (parsed !== null && parsed !== undefined) return parsed;
+                        lastErr = new Error('Risposta non valida o incompleta dal proxy.');
                     } catch (err) {
                         lastErr = err;
                         console.warn('Proxy CORS fallito, riprovo:', err);
@@ -2375,12 +2381,14 @@
 
         async function youtubeSearchFirstPage(query) {
             const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-            const html = await fetchViaScrapeProxies(searchUrl, undefined, text => text.includes('ytInitialData'));
-            const data = extractJsonVar(html, 'ytInitialData');
-            if (!data) throw new Error('Pagina risultati non riconosciuta.');
-            scrapeInnertubeKey = (html.match(/"INNERTUBE_API_KEY":"([^"]+)"/) || [])[1] || null;
-            scrapeClientVersion = (html.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/) || [])[1] || null;
-            return walkSearchResults(data);
+            const result = await fetchViaScrapeProxies(searchUrl, undefined, text => {
+                if (!text.includes('ytInitialData')) return null;
+                const data = extractJsonVar(text, 'ytInitialData');
+                return data ? { html: text, data } : null;
+            });
+            scrapeInnertubeKey = (result.html.match(/"INNERTUBE_API_KEY":"([^"]+)"/) || [])[1] || null;
+            scrapeClientVersion = (result.html.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/) || [])[1] || null;
+            return walkSearchResults(result.data);
         }
 
         async function youtubeSearchContinuation(continuation) {
@@ -2392,10 +2400,9 @@
             });
             let data;
             try {
-                const text = await fetchViaScrapeProxies(endpoint, {
+                data = await fetchViaScrapeProxies(endpoint, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body
-                }, t => { try { JSON.parse(t); return true; } catch { return false; } });
-                data = JSON.parse(text);
+                }, text => { try { return JSON.parse(text); } catch { return null; } });
             } catch (err) {
                 console.warn('Continuazione ricerca fallita:', err);
                 return { items: [], continuation: null };
