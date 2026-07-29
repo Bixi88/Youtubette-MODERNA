@@ -2275,18 +2275,32 @@
         // potrebbero imporre in caso di traffico anomalo: per questo si prova più
         // proxy in sequenza, esattamente come per Spotify.
         const YT_SCRAPE_PROXIES = [
-            url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-            url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`
+            { name: 'allorigins', build: url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
+            { name: 'corsproxy.io', build: url => `https://corsproxy.io/?url=${encodeURIComponent(url)}` }
         ];
+
+        // Timeout per singolo tentativo: senza questo un proxy pubblico lento o
+        // "appeso" può bloccare il fetch per minuti prima che il browser rinunci.
+        const SCRAPE_PROXY_TIMEOUT_MS = 8000;
+
+        async function fetchWithTimeout(url, options, timeoutMs) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                return await fetch(url, { ...options, signal: controller.signal });
+            } finally {
+                clearTimeout(timer);
+            }
+        }
 
         async function fetchViaScrapeProxies(targetUrl, options, parse = text => text) {
             let lastErr = null;
-            for (const buildProxyUrl of YT_SCRAPE_PROXIES) {
+            for (const proxy of YT_SCRAPE_PROXIES) {
                 // Due tentativi per proxy: un fallimento di rete può essere solo momentaneo
                 // (proxy pubblico sovraccarico), vale la pena riprovare prima di scartarlo.
                 for (let attempt = 0; attempt < 2; attempt++) {
                     try {
-                        const res = await fetch(buildProxyUrl(targetUrl), options);
+                        const res = await fetchWithTimeout(proxy.build(targetUrl), options, SCRAPE_PROXY_TIMEOUT_MS);
                         if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
                         const text = await res.text();
                         // Un proxy con server in UE può far comparire a YouTube la pagina di
@@ -2298,11 +2312,16 @@
                         // davvero la risposta viene accettata, altrimenti si scarta e si
                         // riprova con il proxy successivo.
                         const parsed = parse(text);
-                        if (parsed !== null && parsed !== undefined) return parsed;
+                        if (parsed !== null && parsed !== undefined) {
+                            showToast(`Proxy usato: ${proxy.name}`);
+                            return parsed;
+                        }
                         lastErr = new Error('Risposta non valida o incompleta dal proxy.');
                     } catch (err) {
-                        lastErr = err;
-                        console.warn('Proxy CORS fallito, riprovo:', err);
+                        lastErr = err && err.name === 'AbortError'
+                            ? new Error(`Timeout proxy ${proxy.name}`)
+                            : err;
+                        console.warn('Proxy CORS fallito, riprovo:', lastErr);
                     }
                 }
             }
