@@ -2,11 +2,6 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <!-- Dalla fine del 2025 YouTube richiede un header Referer valido per il Player IFrame
-         API: se il browser lo sopprime (referrer-policy troppo restrittiva, o assente),
-         il player fallisce con l'errore 153 "Video player configuration error" su gran
-         parte dei video, non solo su quelli con embedding realmente disabilitato. -->
-    <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="color-scheme" content="dark">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>YouTubette - Player</title>
@@ -707,8 +702,18 @@
             
             <div class="mb-2">
                 <div class="flex items-center justify-between mb-2">
-                    <span id="modalApiBadgeError" class="hidden text-[10px] font-bold text-red-500 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full animate-pulse">Ricerca non disponibile</span>
+                    <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted">YouTube API Key (primaria)</label>
+                    <span id="modalApiBadgeError" class="hidden text-[10px] font-bold text-red-500 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full animate-pulse">Chiave Non Valida</span>
                 </div>
+                <input type="text" id="modalApiKeyInput" placeholder="Incolla qui la tua chiave API..." 
+                    class="w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
+            </div>
+
+            <div class="mb-2 mt-4">
+                <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted mb-2">YouTube API Key (secondaria)</label>
+                <input type="text" id="modalApiKeyInput2" placeholder="Opzionale: usata solo se la primaria finisce la quota..." 
+                    class="w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
+                <p class="text-[10px] mt-1.5 custom-text-muted">Ordine: prima la chiave primaria, poi la secondaria se la prima esaurisce la quota, infine un fallback automatico senza chiave.</p>
             </div>
 
             <div class="mt-6 border-t border-white/5 pt-4">
@@ -728,6 +733,8 @@
         // Estetica unica dell'app (niente più palette multiple/AMOLED): i colori sono
         // fissi, definiti nel token system CSS in testa al documento.
         let appState = {
+            apiKey: localStorage.getItem('youtubette_api_key') || '',
+            apiKey2: localStorage.getItem('youtubette_api_key_2') || '',
             tracks: [],
             currentIndex: -1,
             isPlaying: false,
@@ -898,20 +905,9 @@
         window.onYouTubeIframeAPIReady = function() {
             player = new YT.Player('ytPlayerContainer', {
                 height: '100%', width: '100%', videoId: '',
-                playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'modestbranding': 1, 'rel': 0, 'iv_load_policy': 3, 'origin': window.location.origin },
-                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange, 'onError': onPlayerError }
+                playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'modestbranding': 1, 'rel': 0, 'iv_load_policy': 3 },
+                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
             });
-        }
-
-        function onPlayerError(event) {
-            // Codici YouTube: 2 parametro non valido, 5 errore player HTML5, 100 video
-            // rimosso/privato, 101/150 embedding disabilitato dal proprietario. Senza il
-            // filtro "videoEmbeddable" della Data API (qui non più usata) qualche risultato
-            // può risultare non riproducibile: invece di restare senza audio in silenzio,
-            // avvisiamo e si passa subito al brano successivo in coda.
-            console.warn('Video non riproducibile (codice', event.data, '), salto al successivo.');
-            showToast('Video non disponibile per la riproduzione, salto al prossimo...');
-            nextTrack();
         }
 
         function onPlayerReady(event) {
@@ -1875,7 +1871,11 @@
 
         function openApiModal() {
             const modal = document.getElementById('apiModal');
-            if (modal) {
+            const input = document.getElementById('modalApiKeyInput');
+            const input2 = document.getElementById('modalApiKeyInput2');
+            if (modal && input) {
+                input.value = appState.apiKey;
+                if (input2) input2.value = appState.apiKey2;
                 modal.classList.add('active');
                 renderSettingsPlaylistList();
             }
@@ -1898,6 +1898,13 @@
         }
 
         function saveSettingsFromModal() {
+            const key = document.getElementById('modalApiKeyInput').value.trim();
+            const key2 = document.getElementById('modalApiKeyInput2')?.value.trim() || '';
+            appState.apiKey = key;
+            appState.apiKey2 = key2;
+            localStorage.setItem('youtubette_api_key', key);
+            localStorage.setItem('youtubette_api_key_2', key2);
+
             document.getElementById('apiErrorBadge')?.classList.add('hidden');
             document.getElementById('modalApiBadgeError').classList.add('hidden');
 
@@ -2264,265 +2271,62 @@
             return now.toISOString();
         }
 
-        // --- RICERCA YOUTUBE SENZA CHIAVE API E SENZA WORKER PROPRIETARIO ---
-        // Terza via: si scarica la pagina pubblica dei risultati di ricerca di YouTube
-        // (quella che vede chiunque nel browser) passando da un proxy CORS pubblico
-        // generico - lo stesso trucco già usato qui sotto per importare le playlist
-        // Spotify - e si estraggono i dati che YouTube stessa incorpora nella pagina
-        // (var ytInitialData = {...}). Nessuna Data API coinvolta, quindi nessuna quota
-        // di 100 unit/giorno: il numero di ricerche non è limitato da noi. Il limite
-        // reale che resta è quello, non documentato, che YouTube o il proxy pubblico
-        // potrebbero imporre in caso di traffico anomalo: per questo si prova più
-        // proxy in sequenza, esattamente come per Spotify.
-        const YT_SCRAPE_PROXIES = [
-            { name: 'allorigins', build: url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}` },
-            { name: 'corsproxy.io', build: url => `https://corsproxy.io/?url=${encodeURIComponent(url)}` }
-        ];
+        // URL del Cloudflare Worker di backup (terzo livello, senza API key ufficiale).
+        // Sostituisci con l'URL del tuo worker una volta deployato.
+        const YT_FALLBACK_WORKER_URL = 'https://youtubette-search-proxy.bix20252025.workers.dev';
 
-        // Timeout per singolo tentativo: senza questo un proxy pubblico lento o
-        // "appeso" può bloccare il fetch per minuti prima che il browser rinunci.
-        const SCRAPE_PROXY_TIMEOUT_MS = 8000;
-
-        async function fetchWithTimeout(url, options, timeoutMs) {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), timeoutMs);
-            try {
-                return await fetch(url, { ...options, signal: controller.signal });
-            } finally {
-                clearTimeout(timer);
-            }
+        function isQuotaError(data) {
+            const reason = data?.error?.errors?.[0]?.reason || '';
+            return reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' || reason === 'rateLimitExceeded';
         }
 
-        async function fetchViaScrapeProxies(targetUrl, options, parse = text => text) {
-            let lastErr = null;
-            for (const proxy of YT_SCRAPE_PROXIES) {
-                // Due tentativi per proxy: un fallimento di rete può essere solo momentaneo
-                // (proxy pubblico sovraccarico), vale la pena riprovare prima di scartarlo.
-                for (let attempt = 0; attempt < 2; attempt++) {
-                    try {
-                        const res = await fetchWithTimeout(proxy.build(targetUrl), options, SCRAPE_PROXY_TIMEOUT_MS);
-                        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
-                        const text = await res.text();
-                        // Un proxy con server in UE può far comparire a YouTube la pagina di
-                        // consenso cookie invece dei risultati veri (risponde comunque 200), e
-                        // un proxy che tronca risposte grandi (la pagina risultati di YouTube è
-                        // pesante) può lasciare la stringa "ytInitialData" nel testo pur avendo
-                        // un JSON incompleto. Per questo la validazione fa il parsing vero e
-                        // proprio, non un controllo superficiale: solo se il parse riesce
-                        // davvero la risposta viene accettata, altrimenti si scarta e si
-                        // riprova con il proxy successivo.
-                        const parsed = parse(text);
-                        if (parsed !== null && parsed !== undefined) {
-                            showToast(`Proxy usato: ${proxy.name}`);
-                            return parsed;
-                        }
-                        lastErr = new Error('Risposta non valida o incompleta dal proxy.');
-                    } catch (err) {
-                        lastErr = err && err.name === 'AbortError'
-                            ? new Error(`Timeout proxy ${proxy.name}`)
-                            : err;
-                        console.warn('Proxy CORS fallito, riprovo:', lastErr);
-                    }
-                }
-            }
-            throw lastErr || new Error('Nessun proxy CORS disponibile in questo momento.');
+        function buildGoogleApiUrl(key, params) {
+            let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&key=${key}`;
+            if (params.q) url += `&q=${encodeURIComponent(params.q)}`;
+            if (params.maxResults) url += `&maxResults=${params.maxResults}`;
+            if (params.videoDuration) url += `&videoDuration=${params.videoDuration}`;
+            if (params.publishedAfter) url += `&publishedAfter=${encodeURIComponent(params.publishedAfter)}`;
+            if (params.pageToken) url += `&pageToken=${params.pageToken}`;
+            return url;
         }
 
-        function extractJsonVar(html, varName) {
-            const marker = `var ${varName} = `;
-            const start = html.indexOf(marker);
-            if (start === -1) return null;
-            const jsonStart = start + marker.length;
-            const end = html.indexOf(';<' + '/script>', jsonStart);
-            try { return JSON.parse(html.slice(jsonStart, end === -1 ? undefined : end)); }
-            catch { return null; }
-        }
-
-        function parseDurationToSeconds(lengthText) {
-            if (!lengthText) return null;
-            return lengthText.split(':').map(Number).reduce((acc, v) => acc * 60 + v, 0);
-        }
-
-        function matchesDurationFilter(seconds, filter) {
-            if (!filter || filter === 'any' || seconds == null) return true;
-            if (filter === 'short') return seconds < 240;
-            if (filter === 'medium') return seconds >= 240 && seconds <= 1200;
-            if (filter === 'long') return seconds > 1200;
-            return true;
-        }
-
-        // Converte un videoRenderer grezzo di ytInitialData nel formato interno che il
-        // resto dell'app già si aspetta (stesso shape della YouTube Data API v3).
-        function videoRendererToItem(vr) {
-            if (!vr || !vr.videoId) return null;
-            const thumbs = vr.thumbnail?.thumbnails || [];
-            const best = thumbs[thumbs.length - 1];
-            return {
-                id: { videoId: vr.videoId },
-                snippet: {
-                    title: (vr.title?.runs || []).map(r => r.text).join(''),
-                    channelTitle: (vr.ownerText?.runs || vr.longBylineText?.runs || []).map(r => r.text).join(''),
-                    thumbnails: {
-                        high: best ? { url: best.url } : undefined,
-                        default: { url: `https://i.ytimg.com/vi/${vr.videoId}/default.jpg` }
-                    }
-                },
-                _lengthSeconds: parseDurationToSeconds(vr.lengthText?.simpleText)
-            };
-        }
-
-        // Naviga la struttura della pagina risultati, ignorando shelf/canali/playlist e
-        // annunci, tenendo solo i video veri e propri; recupera anche il continuation
-        // token per poter caricare altre pagine di risultati (usato da "carica altri").
-        function walkSearchResults(data) {
-            const items = [];
-            let continuation = null;
-            try {
-                const sections = data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents;
-                sections.forEach(section => {
-                    (section.itemSectionRenderer?.contents || []).forEach(c => {
-                        if (c.videoRenderer) items.push(c.videoRenderer);
-                    });
-                    if (section.continuationItemRenderer) {
-                        continuation = section.continuationItemRenderer.continuationEndpoint?.continuationCommand?.token || null;
-                    }
-                });
-            } catch (err) {
-                console.warn('Struttura pagina risultati inattesa:', err);
-            }
-            return { items, continuation };
-        }
-
-        // Stato della paginazione via scraping: chiave/versione del client "innertube"
-        // usato internamente da youtube.com stesso per le proprie chiamate di ricerca
-        // (pubbliche, presenti nel sorgente della pagina - non è la Data API a pagamento).
-        let scrapeInnertubeKey = null, scrapeClientVersion = null;
-
-        async function youtubeSearchFirstPage(query) {
-            const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-            const result = await fetchViaScrapeProxies(searchUrl, undefined, text => {
-                if (!text.includes('ytInitialData')) return null;
-                const data = extractJsonVar(text, 'ytInitialData');
-                return data ? { html: text, data } : null;
-            });
-            scrapeInnertubeKey = (result.html.match(/"INNERTUBE_API_KEY":"([^"]+)"/) || [])[1] || null;
-            scrapeClientVersion = (result.html.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/) || [])[1] || null;
-            return walkSearchResults(result.data);
-        }
-
-        async function youtubeSearchContinuation(continuation) {
-            if (!continuation || !scrapeInnertubeKey) return { items: [], continuation: null };
-            const endpoint = `https://www.youtube.com/youtubei/v1/search?key=${scrapeInnertubeKey}`;
-            const body = JSON.stringify({
-                context: { client: { clientName: 'WEB', clientVersion: scrapeClientVersion || '2.20240101.00.00' } },
-                continuation
-            });
-            let data;
-            try {
-                data = await fetchViaScrapeProxies(endpoint, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body
-                }, text => { try { return JSON.parse(text); } catch { return null; } });
-            } catch (err) {
-                console.warn('Continuazione ricerca fallita:', err);
-                return { items: [], continuation: null };
-            }
-            const items = []; let nextContinuation = null;
-            try {
-                (data.onResponseReceivedCommands || []).forEach(action => {
-                    (action.appendContinuationItemsAction?.continuationItems || []).forEach(c => {
-                        (c.itemSectionRenderer?.contents || []).forEach(c2 => { if (c2.videoRenderer) items.push(c2.videoRenderer); });
-                        if (c.continuationItemRenderer) {
-                            nextContinuation = c.continuationItemRenderer.continuationEndpoint?.continuationCommand?.token || null;
-                        }
-                    });
-                });
-            } catch (err) { console.warn('Struttura continuazione inattesa:', err); }
-            return { items, continuation: nextContinuation };
-        }
-
-        // Controllo incorporabilità via oEmbed pubblico di YouTube (nessuna chiave,
-        // CORS-friendly perché pensato apposta per essere chiamato da siti terzi che
-        // vogliono incorporare un video). Se il proprietario ha disattivato l'embedding
-        // altrove, questo endpoint risponde 401/403: è lo stesso controllo che la Data
-        // API garantiva con "videoEmbeddable=true" e che qui mancava - causa più
-        // probabile dei tanti video che, una volta scelti, restavano senza audio (frequente
-        // nei video musicali "ufficiali"/major label, che spesso bloccano l'embedding).
-        async function isVideoEmbeddable(videoId) {
-            try {
-                const url = `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`;
-                const res = await fetch(url);
-                if (res.status === 401 || res.status === 403) return false;
-                return true;
-            } catch (err) {
-                // Richiesta bloccata per motivi di rete/CORS: non possiamo saperlo con
-                // certezza, meglio non scartare il video per un problema che non c'entra
-                // con l'embedding.
-                return true;
-            }
-        }
-
-        async function filterEmbeddable(tracks) {
-            if (tracks.length === 0) return tracks;
-            const CONCURRENCY = 6;
-            const ok = new Array(tracks.length);
-            let i = 0;
-            async function worker() {
-                while (i < tracks.length) {
-                    const idx = i++;
-                    ok[idx] = await isVideoEmbeddable(tracks[idx].id.videoId);
-                }
-            }
-            await Promise.all(Array.from({ length: Math.min(CONCURRENCY, tracks.length) }, worker));
-            return tracks.filter((_, idx) => ok[idx]);
-        }
-
-        // Punto d'ingresso unico usato da performSearch: stesso formato di ritorno di
-        // prima ({items, nextPageToken}), così il resto del codice non cambia.
+        // Prova in ordine: chiave API primaria -> chiave API secondaria (solo se la
+        // prima ha esaurito la quota o manca) -> Worker di backup senza API ufficiale.
+        // Le prime due tornano il JSON nel formato ufficiale della YouTube Data API v3;
+        // anche il Worker di backup lo restituisce già normalizzato nello stesso formato
+        // (items[].id.videoId, items[].snippet.title/channelTitle/thumbnails, nextPageToken),
+        // così le funzioni chiamanti non devono sapere quale delle tre fonti ha risposto.
         async function youtubeSearch(params) {
-            try {
-                let items, continuation;
-                if (params.pageToken) {
-                    ({ items, continuation } = await youtubeSearchContinuation(params.pageToken));
-                } else {
-                    ({ items, continuation } = await youtubeSearchFirstPage(params.q));
+            const keys = [appState.apiKey, appState.apiKey2].filter(Boolean);
+
+            for (const key of keys) {
+                try {
+                    const res = await fetch(buildGoogleApiUrl(key, params));
+                    const data = await res.json();
+                    if (!data.error) return data;
+                    console.warn(isQuotaError(data)
+                        ? 'Quota YouTube esaurita per una chiave, provo la successiva...'
+                        : 'Chiave YouTube non valida o errore API:', data.error.message);
+                } catch (err) {
+                    console.warn('Chiamata alla YouTube API fallita:', err);
                 }
-
-                const mapAndFilter = async raw => {
-                    let mapped = raw.map(videoRendererToItem).filter(Boolean);
-                    if (params.videoDuration) mapped = mapped.filter(t => matchesDurationFilter(t._lengthSeconds, params.videoDuration));
-                    mapped = await filterEmbeddable(mapped);
-                    return mapped;
-                };
-
-                let tracks = await mapAndFilter(items);
-
-                // La prima sezione della pagina pubblica (o una singola pagina di
-                // continuazione) contiene tipicamente 18-20 video, molti meno dopo il
-                // filtro durata e ora anche dopo il filtro incorporabilità: invece di
-                // restituire una lista corta, incateniamo altre pagine di continuazione
-                // finché non si raggiunge il numero richiesto, la ricerca si esaurisce,
-                // o si supera un tetto di sicurezza (evita di sparare troppe richieste
-                // per una ricerca di nicchia con pochi risultati validi).
-                const wanted = params.maxResults || tracks.length;
-                const MAX_EXTRA_PAGES = 6;
-                let extraPages = 0;
-                while (tracks.length < wanted && continuation && extraPages < MAX_EXTRA_PAGES) {
-                    extraPages++;
-                    const more = await youtubeSearchContinuation(continuation);
-                    continuation = more.continuation;
-                    tracks = tracks.concat(await mapAndFilter(more.items));
-                }
-                // Nota: il filtro per data di pubblicazione (publishedAfter) non è applicato
-                // qui: la pagina pubblica riporta solo un testo relativo ("2 settimane fa"),
-                // non una data esatta confrontabile in modo affidabile.
-
-                if (params.maxResults) tracks = tracks.slice(0, params.maxResults);
-
-                return { items: tracks, nextPageToken: continuation || '' };
-            } catch (err) {
-                console.warn('Ricerca YouTube via scraping fallita:', err);
-                return null;
             }
+
+            // Terzo tentativo: Worker di backup, nessuna chiave richiesta.
+            try {
+                let url = `${YT_FALLBACK_WORKER_URL}/search?q=${encodeURIComponent(params.q || '')}`;
+                if (params.maxResults) url += `&maxResults=${params.maxResults}`;
+                if (params.pageToken) url += `&pageToken=${encodeURIComponent(params.pageToken)}`;
+                if (params.videoDuration) url += `&videoDuration=${params.videoDuration}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.error) throw new Error(data.error);
+                return data; // già normalizzato: {items:[...], nextPageToken}
+            } catch (err) {
+                console.warn('Anche il Worker di backup ha fallito:', err);
+            }
+
+            return null; // tutte e tre le fonti hanno fallito
         }
 
         async function performSearch(isLoadMore = false) {
@@ -2553,7 +2357,7 @@
                 const data = await youtubeSearch(params);
 
                 if (!data) {
-                    throw new Error('Nessun proxy CORS disponibile in questo momento');
+                    throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
                 }
 
                 document.getElementById('apiErrorBadge')?.classList.add('hidden');
@@ -2578,7 +2382,7 @@
                         <div class="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-center max-w-xs mx-auto">
                             <i class="fa-solid fa-triangle-exclamation text-red-500 text-lg mb-2"></i>
                             <p class="text-xs font-bold text-red-400">Ricerca YouTube non disponibile</p>
-                            <p class="text-[10px] mt-1 custom-text-muted">I proxy pubblici usati per la ricerca non hanno risposto. Riprova tra poco.</p>
+                            <p class="text-[10px] mt-1 custom-text-muted">Chiavi API non valide o quota esaurita, e anche il fallback di backup non ha risposto.</p>
                         </div>
                     `;
                 }
