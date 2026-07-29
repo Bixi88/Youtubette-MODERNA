@@ -69,6 +69,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
+    <!-- Preconnect verso i domini YouTube: apre in anticipo la connessione (DNS+TLS)
+         così, quando parte davvero il primo player.loadVideoById(), non si paga più
+         quel tempo di handshake sul percorso critico dell'avvio audio. -->
+    <link rel="preconnect" href="https://www.youtube.com">
+    <link rel="preconnect" href="https://i.ytimg.com">
+    <link rel="preconnect" href="https://www.google.com">
+
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
@@ -575,6 +582,9 @@
         </section>
 
         <div id="ytPlayerContainer" class="absolute top-0 left-0 w-1 h-1 opacity-0 pointer-events-none"></div>
+        <!-- Secondo player, invisibile e sempre muto: serve solo a pre-bufferizzare in
+             anticipo il prossimo brano (vedi preloadNextTrack), non è mai quello ascoltato. -->
+        <div id="ytPreloadPlayerContainer" class="absolute top-0 left-0 w-1 h-1 opacity-0 pointer-events-none"></div>
     </main>
 
     <!-- Mini Player -->
@@ -895,12 +905,123 @@
         document.getElementsByTagName('script')[0].parentNode.insertBefore(tag, document.getElementsByTagName('script')[0]);
 
         let player;
+        // --- Preload del brano successivo (vedi risposta alla richiesta di velocizzare l'avvio) ---
+        // preloadPlayer: secondo player nascosto sempre muto, usato solo per "cueVideoById" il
+        // prossimo brano in anticipo, così quando lo si raggiunge davvero è già bufferizzato.
+        // preloadedIndex/preloadedVideoId: quale brano (indice + id video) è attualmente pronto
+        // nel preloadPlayer, per sapere se possiamo scambiarlo con quello attivo o no.
+        let preloadPlayer;
+        let preloadedIndex = -1;
+        let preloadedVideoId = null;
+        let preloadDebounceTimer = null;
+
         window.onYouTubeIframeAPIReady = function() {
             player = new YT.Player('ytPlayerContainer', {
                 height: '100%', width: '100%', videoId: '',
-                playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'modestbranding': 1, 'rel': 0 },
+                playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'modestbranding': 1, 'rel': 0, 'iv_load_policy': 3 },
                 events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
             });
+            preloadPlayer = new YT.Player('ytPreloadPlayerContainer', {
+                height: '100%', width: '100%', videoId: '',
+                playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'modestbranding': 1, 'rel': 0, 'iv_load_policy': 3 },
+                events: { 'onReady': onPreloadPlayerReady, 'onStateChange': onPreloadPlayerStateChange }
+            });
+        }
+
+        function onPreloadPlayerReady(event) {
+            try { event.target.mute(); } catch (e) {}
+        }
+
+        // Il preloadPlayer non è mai quello in ascolto (resta sempre muto e in pausa/cued):
+        // i suoi cambi di stato non devono toccare icone, media session o avanzamento brano.
+        function onPreloadPlayerStateChange(event) {}
+
+        // Resetta lo stato del preload quando cambia del tutto la lista in ascolto (nuova
+        // ricerca o nuovo import Spotify): un id pre-bufferizzato della lista precedente
+        // non ha più senso e andrebbe scambiato per errore col brano sbagliato.
+        function resetPreloadState() {
+            clearTimeout(preloadDebounceTimer);
+            preloadedIndex = -1;
+            preloadedVideoId = null;
+            try { preloadPlayer?.stopVideo?.(); } catch (e) {}
+        }
+
+        // Determina l'indice del brano che verrebbe dopo "index", solo se già presente in
+        // lista: se servisse caricare un'altra pagina di risultati o si tornerebbe all'inizio,
+        // non precarichiamo (per non complicare la logica di paginazione/loop).
+        function getNextPreloadableIndex(index) {
+            if (appState.tracks.length === 0) return null;
+            const nextIdx = index + 1;
+            if (nextIdx >= appState.tracks.length) return null;
+            return nextIdx;
+        }
+
+        // Aspetta qualche secondo di riproduzione stabile prima di avviare il preload: se
+        // l'utente sta saltando velocemente da un brano all'altro, non ha senso bufferizzare
+        // (o peggio, cercare su YouTube l'id di) un brano che magari non raggiungerà mai.
+        function schedulePreloadNext(index) {
+            clearTimeout(preloadDebounceTimer);
+            preloadDebounceTimer = setTimeout(() => {
+                if (appState.currentIndex === index) preloadNextTrack(index);
+            }, 4000);
+        }
+
+        async function preloadNextTrack(index) {
+            if (!preloadPlayer?.cueVideoById) return;
+            const nextIdx = getNextPreloadableIndex(index);
+            if (nextIdx === null) return;
+
+            const nextTrackObj = appState.tracks[nextIdx];
+            if (!nextTrackObj) return;
+            if (preloadedIndex === nextIdx && preloadedVideoId === nextTrackObj.id) return; // già fatto
+
+            let videoId = nextTrackObj.id;
+            if (!videoId) {
+                // Brano da playlist Spotify non ancora risolto: risolviamo l'id in anticipo,
+                // in background, senza toccare l'interfaccia (esattamente la stessa ricerca
+                // che accadrebbe comunque quando l'utente raggiunge il brano: qui la
+                // anticipiamo solo di qualche secondo, non se ne fanno di più).
+                const resolved = await resolveYoutubeIdForTrack(nextTrackObj, nextIdx);
+                if (appState.currentIndex !== index || !resolved) return; // brano cambiato o non trovato nel frattempo
+                videoId = nextTrackObj.id;
+            }
+            if (!videoId || appState.currentIndex !== index) return;
+
+            try {
+                preloadPlayer.cueVideoById({ videoId, suggestedQuality: 'small' });
+                preloadedIndex = nextIdx;
+                preloadedVideoId = videoId;
+            } catch (e) {}
+        }
+
+        // Se il brano che stiamo per riprodurre è esattamente quello già pre-bufferizzato,
+        // scambiamo i due player invece di ripartire da zero: quello "pronto" diventa il
+        // player attivo e parte all'istante, quello appena lasciato diventa il nuovo slot
+        // di preload per il brano successivo.
+        function trySwapWithPreloadedPlayer(index, track) {
+            if (!player || !preloadPlayer) return false;
+            if (preloadedIndex !== index || !track.id || preloadedVideoId !== track.id) return false;
+            try {
+                player.removeEventListener('onStateChange', onPlayerStateChange);
+                preloadPlayer.removeEventListener('onStateChange', onPreloadPlayerStateChange);
+
+                const tmp = player;
+                player = preloadPlayer;
+                preloadPlayer = tmp;
+
+                player.addEventListener('onStateChange', onPlayerStateChange);
+                preloadPlayer.addEventListener('onStateChange', onPreloadPlayerStateChange);
+
+                player.unMute();
+                player.setVolume(document.getElementById('volumeSlider')?.value ?? 100);
+                player.playVideo();
+
+                preloadedIndex = -1;
+                preloadedVideoId = null;
+                return true;
+            } catch (e) {
+                return false;
+            }
         }
 
         function onPlayerReady(event) {
@@ -923,6 +1044,7 @@
                 setPlayIconState(true);
                 updateDuration(); 
                 updateMediaSessionState(true);
+                schedulePreloadNext(appState.currentIndex);
             } else if (event.data == YT.PlayerState.PAUSED) {
                 appState.isPlaying = false;
                 setPlayIconState(false);
@@ -2332,6 +2454,7 @@
                 currentListSource = 'youtube';
                 showResultsView(query);
                 appState.tracks = []; appState.currentIndex = -1; nextSearchPageToken = '';
+                resetPreloadState();
                 toggleDownloadButtons(false);
                 document.getElementById('trackList').innerHTML = '';
                 if (resultsStatusText) resultsStatusText.classList.add('hidden');
@@ -2546,6 +2669,7 @@
             if (!playlistId) {
                 showResultsView('Risultati');
                 appState.tracks = []; appState.currentIndex = -1;
+                resetPreloadState();
                 document.getElementById('trackList').innerHTML = '';
                 if (resultsStatusText) {
                     resultsStatusText.classList.remove('hidden');
@@ -2558,6 +2682,7 @@
             nextSearchPageToken = '';
             showResultsView('Playlist Spotify');
             appState.tracks = []; appState.currentIndex = -1;
+            resetPreloadState();
             toggleDownloadButtons(false);
             document.getElementById('trackList').innerHTML = '';
             if (resultsStatusText) {
@@ -2795,6 +2920,11 @@
 
             const track = appState.tracks[index];
 
+            // Il preload eventualmente già pianificato riguardava il brano che stiamo
+            // lasciando: lo stato del preloadPlayer resta valido finché punta al brano
+            // giusto, ma il timer di pianificazione va ricalcolato sul nuovo brano.
+            clearTimeout(preloadDebounceTimer);
+
             // Ferma SUBITO l'audio del brano uscente: se il nuovo brano ha già un id
             // YouTube, loadVideoById() poco sotto lo sostituirà comunque all'istante,
             // ma quando serve prima risolvere l'id (brano Spotify mai ascoltato,
@@ -2918,7 +3048,17 @@
                 }
             }
 
-            if (player?.loadVideoById) player.loadVideoById(track.id);
+            // suggestedQuality 'small': il player è un riquadro 1x1 invisibile, quindi la
+            // risoluzione video non ha alcun impatto visivo per l'utente. Chiedendo fin da
+            // subito una qualità bassa, YouTube deve bufferizzare molti meno dati prima di
+            // poter iniziare la riproduzione: è il punto che pesa di più sull'attesa "parte
+            // la canzone", più della semplice velocità di rete.
+            // Se questo è esattamente il brano che avevamo già pre-bufferizzato in background
+            // (preloadNextTrack), lo scambiamo con quello attivo: è già pronto, parte
+            // all'istante invece di ripartire da un buffering a zero.
+            if (!trySwapWithPreloadedPlayer(index, track)) {
+                if (player?.loadVideoById) player.loadVideoById({ videoId: track.id, suggestedQuality: 'small' });
+            }
             updateMediaSessionMetadata(track);
         }
 
