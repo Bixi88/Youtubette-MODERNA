@@ -426,6 +426,25 @@
         .track-row::after { content:''; position:absolute; left:64px; right:0; bottom:0; height:1px; background:rgba(243,239,230,0.08); }
         .track-row:last-child::after { display:none; }
         .track-playing-badge { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(0,0,0,.35); color:var(--accent); }
+
+        /* ================= Mini loader "dino" (import playlist Spotify) ================= */
+        .pixel-dino-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:16px 0; }
+        .pixel-dino { position:relative; width:21px; height:18px; animation:dinoHop .5s ease-in-out infinite; }
+        .pixel-dino span { position:absolute; top:0; left:0; width:3px; height:3px; background:transparent; }
+        .pixel-dino .dino-body {
+            box-shadow:
+                9px 0 0 0 var(--accent), 12px 0 0 0 var(--accent),
+                9px 3px 0 0 var(--accent), 12px 3px 0 0 var(--accent), 15px 3px 0 0 var(--accent),
+                3px 6px 0 0 var(--accent), 6px 6px 0 0 var(--accent), 9px 6px 0 0 var(--accent), 12px 6px 0 0 var(--accent), 15px 6px 0 0 var(--accent),
+                0 9px 0 0 var(--accent), 3px 9px 0 0 var(--accent), 6px 9px 0 0 var(--accent), 9px 9px 0 0 var(--accent), 12px 9px 0 0 var(--accent), 15px 9px 0 0 var(--accent), 18px 9px 0 0 var(--accent),
+                0 12px 0 0 var(--accent), 3px 12px 0 0 var(--accent), 6px 12px 0 0 var(--accent), 9px 12px 0 0 var(--accent), 12px 12px 0 0 var(--accent), 15px 12px 0 0 var(--accent);
+        }
+        .pixel-dino .dino-legs-a { box-shadow: 3px 15px 0 0 var(--accent), 15px 15px 0 0 var(--accent); animation: dinoLegsA .5s steps(1,end) infinite; }
+        .pixel-dino .dino-legs-b { box-shadow: 0 15px 0 0 var(--accent), 12px 15px 0 0 var(--accent); animation: dinoLegsB .5s steps(1,end) infinite; }
+        @keyframes dinoHop { 0%, 50%, 100% { transform: translateY(0); } 25%, 75% { transform: translateY(-2px); } }
+        @keyframes dinoLegsA { 0%, 49% { opacity:1; } 50%, 100% { opacity:0; } }
+        @keyframes dinoLegsB { 0%, 49% { opacity:0; } 50%, 100% { opacity:1; } }
+        .pixel-dino-wrap p { margin:0; }
     </style>
 </head>
 <body class="flex flex-col justify-between hidden p-4 box-border h-full custom-bg-main relative">
@@ -2471,6 +2490,21 @@
             return null;
         }
 
+        // Piccolo loader a "pixel" stile dino di Chrome: solo pochi quadratini, mostrato
+        // durante l'importazione di una playlist Spotify (fase con rete/parsing più lenta).
+        function pixelDinoLoaderHtml(label) {
+            return `
+                <div class="pixel-dino-wrap">
+                    <div class="pixel-dino">
+                        <span class="dino-body"></span>
+                        <span class="dino-legs-a"></span>
+                        <span class="dino-legs-b"></span>
+                    </div>
+                    <p class="text-xs italic custom-text-muted">${escapeHtml(label)}</p>
+                </div>
+            `;
+        }
+
         async function importSpotifyPlaylist(url) {
             const resultsStatusText = document.getElementById('resultsStatusText');
             const playlistId = extractSpotifyPlaylistId(url);
@@ -2494,7 +2528,7 @@
             document.getElementById('trackList').innerHTML = '';
             if (resultsStatusText) {
                 resultsStatusText.classList.remove('hidden');
-                resultsStatusText.innerText = 'Importazione playlist Spotify in corso...';
+                resultsStatusText.innerHTML = pixelDinoLoaderHtml('Importazione playlist Spotify in corso...');
             }
 
             try {
@@ -2726,6 +2760,14 @@
             if (index < 0 || index >= appState.tracks.length) return;
 
             const track = appState.tracks[index];
+
+            // Ferma SUBITO l'audio del brano uscente: se il nuovo brano ha già un id
+            // YouTube, loadVideoById() poco sotto lo sostituirà comunque all'istante,
+            // ma quando serve prima risolvere l'id (brano Spotify mai ascoltato,
+            // richiesta di rete) il vecchio video altrimenti continuerebbe a suonare
+            // in sottofondo per tutta l'attesa. Pausa subito, poi si riparte pulito
+            // con il nuovo brano quando è pronto.
+            if (player?.pauseVideo) { try { player.pauseVideo(); } catch (e) {} }
 
             // CARICAMENTO SUCESSIVO PREVENTIVO ED ESCLUSIVO (solo per liste da ricerca YouTube,
             // le playlist importate da Spotify non hanno paginazione YouTube):
