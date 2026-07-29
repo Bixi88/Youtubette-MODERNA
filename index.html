@@ -702,18 +702,8 @@
             
             <div class="mb-2">
                 <div class="flex items-center justify-between mb-2">
-                    <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted">YouTube API Key (primaria)</label>
-                    <span id="modalApiBadgeError" class="hidden text-[10px] font-bold text-red-500 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full animate-pulse">Chiave Non Valida</span>
+                    <span id="modalApiBadgeError" class="hidden text-[10px] font-bold text-red-500 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full animate-pulse">Ricerca non disponibile</span>
                 </div>
-                <input type="text" id="modalApiKeyInput" placeholder="Incolla qui la tua chiave API..." 
-                    class="w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
-            </div>
-
-            <div class="mb-2 mt-4">
-                <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted mb-2">YouTube API Key (secondaria)</label>
-                <input type="text" id="modalApiKeyInput2" placeholder="Opzionale: usata solo se la primaria finisce la quota..." 
-                    class="w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
-                <p class="text-[10px] mt-1.5 custom-text-muted">Ordine: prima la chiave primaria, poi la secondaria se la prima esaurisce la quota, infine un fallback automatico senza chiave.</p>
             </div>
 
             <div class="mt-6 border-t border-white/5 pt-4">
@@ -733,8 +723,6 @@
         // Estetica unica dell'app (niente più palette multiple/AMOLED): i colori sono
         // fissi, definiti nel token system CSS in testa al documento.
         let appState = {
-            apiKey: localStorage.getItem('youtubette_api_key') || '',
-            apiKey2: localStorage.getItem('youtubette_api_key_2') || '',
             tracks: [],
             currentIndex: -1,
             isPlaying: false,
@@ -906,8 +894,19 @@
             player = new YT.Player('ytPlayerContainer', {
                 height: '100%', width: '100%', videoId: '',
                 playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'modestbranding': 1, 'rel': 0, 'iv_load_policy': 3 },
-                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
+                events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange, 'onError': onPlayerError }
             });
+        }
+
+        function onPlayerError(event) {
+            // Codici YouTube: 2 parametro non valido, 5 errore player HTML5, 100 video
+            // rimosso/privato, 101/150 embedding disabilitato dal proprietario. Senza il
+            // filtro "videoEmbeddable" della Data API (qui non più usata) qualche risultato
+            // può risultare non riproducibile: invece di restare senza audio in silenzio,
+            // avvisiamo e si passa subito al brano successivo in coda.
+            console.warn('Video non riproducibile (codice', event.data, '), salto al successivo.');
+            showToast('Video non disponibile per la riproduzione, salto al prossimo...');
+            nextTrack();
         }
 
         function onPlayerReady(event) {
@@ -1871,11 +1870,7 @@
 
         function openApiModal() {
             const modal = document.getElementById('apiModal');
-            const input = document.getElementById('modalApiKeyInput');
-            const input2 = document.getElementById('modalApiKeyInput2');
-            if (modal && input) {
-                input.value = appState.apiKey;
-                if (input2) input2.value = appState.apiKey2;
+            if (modal) {
                 modal.classList.add('active');
                 renderSettingsPlaylistList();
             }
@@ -1898,13 +1893,6 @@
         }
 
         function saveSettingsFromModal() {
-            const key = document.getElementById('modalApiKeyInput').value.trim();
-            const key2 = document.getElementById('modalApiKeyInput2')?.value.trim() || '';
-            appState.apiKey = key;
-            appState.apiKey2 = key2;
-            localStorage.setItem('youtubette_api_key', key);
-            localStorage.setItem('youtubette_api_key_2', key2);
-
             document.getElementById('apiErrorBadge')?.classList.add('hidden');
             document.getElementById('modalApiBadgeError').classList.add('hidden');
 
