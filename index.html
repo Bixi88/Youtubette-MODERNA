@@ -2271,62 +2271,161 @@
             return now.toISOString();
         }
 
-        // URL del Cloudflare Worker di backup (terzo livello, senza API key ufficiale).
-        // Sostituisci con l'URL del tuo worker una volta deployato.
-        const YT_FALLBACK_WORKER_URL = 'https://youtubette-search-proxy.bix20252025.workers.dev';
+        // --- RICERCA YOUTUBE SENZA CHIAVE API E SENZA WORKER PROPRIETARIO ---
+        // Terza via: si scarica la pagina pubblica dei risultati di ricerca di YouTube
+        // (quella che vede chiunque nel browser) passando da un proxy CORS pubblico
+        // generico - lo stesso trucco già usato qui sotto per importare le playlist
+        // Spotify - e si estraggono i dati che YouTube stessa incorpora nella pagina
+        // (var ytInitialData = {...}). Nessuna Data API coinvolta, quindi nessuna quota
+        // di 100 unit/giorno: il numero di ricerche non è limitato da noi. Il limite
+        // reale che resta è quello, non documentato, che YouTube o il proxy pubblico
+        // potrebbero imporre in caso di traffico anomalo: per questo si prova più
+        // proxy in sequenza, esattamente come per Spotify.
+        const YT_SCRAPE_PROXIES = [
+            url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+            url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`
+        ];
 
-        function isQuotaError(data) {
-            const reason = data?.error?.errors?.[0]?.reason || '';
-            return reason === 'quotaExceeded' || reason === 'dailyLimitExceeded' || reason === 'rateLimitExceeded';
-        }
-
-        function buildGoogleApiUrl(key, params) {
-            let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&key=${key}`;
-            if (params.q) url += `&q=${encodeURIComponent(params.q)}`;
-            if (params.maxResults) url += `&maxResults=${params.maxResults}`;
-            if (params.videoDuration) url += `&videoDuration=${params.videoDuration}`;
-            if (params.publishedAfter) url += `&publishedAfter=${encodeURIComponent(params.publishedAfter)}`;
-            if (params.pageToken) url += `&pageToken=${params.pageToken}`;
-            return url;
-        }
-
-        // Prova in ordine: chiave API primaria -> chiave API secondaria (solo se la
-        // prima ha esaurito la quota o manca) -> Worker di backup senza API ufficiale.
-        // Le prime due tornano il JSON nel formato ufficiale della YouTube Data API v3;
-        // anche il Worker di backup lo restituisce già normalizzato nello stesso formato
-        // (items[].id.videoId, items[].snippet.title/channelTitle/thumbnails, nextPageToken),
-        // così le funzioni chiamanti non devono sapere quale delle tre fonti ha risposto.
-        async function youtubeSearch(params) {
-            const keys = [appState.apiKey, appState.apiKey2].filter(Boolean);
-
-            for (const key of keys) {
+        async function fetchViaScrapeProxies(targetUrl, options) {
+            for (const buildProxyUrl of YT_SCRAPE_PROXIES) {
                 try {
-                    const res = await fetch(buildGoogleApiUrl(key, params));
-                    const data = await res.json();
-                    if (!data.error) return data;
-                    console.warn(isQuotaError(data)
-                        ? 'Quota YouTube esaurita per una chiave, provo la successiva...'
-                        : 'Chiave YouTube non valida o errore API:', data.error.message);
+                    const res = await fetch(buildProxyUrl(targetUrl), options);
+                    if (res.ok) return res;
                 } catch (err) {
-                    console.warn('Chiamata alla YouTube API fallita:', err);
+                    console.warn('Proxy CORS non disponibile, provo il successivo:', err);
                 }
             }
+            throw new Error('Nessun proxy CORS disponibile in questo momento.');
+        }
 
-            // Terzo tentativo: Worker di backup, nessuna chiave richiesta.
+        function extractJsonVar(html, varName) {
+            const marker = `var ${varName} = `;
+            const start = html.indexOf(marker);
+            if (start === -1) return null;
+            const jsonStart = start + marker.length;
+            const end = html.indexOf(';<' + '/script>', jsonStart);
+            try { return JSON.parse(html.slice(jsonStart, end === -1 ? undefined : end)); }
+            catch { return null; }
+        }
+
+        function parseDurationToSeconds(lengthText) {
+            if (!lengthText) return null;
+            return lengthText.split(':').map(Number).reduce((acc, v) => acc * 60 + v, 0);
+        }
+
+        function matchesDurationFilter(seconds, filter) {
+            if (!filter || filter === 'any' || seconds == null) return true;
+            if (filter === 'short') return seconds < 240;
+            if (filter === 'medium') return seconds >= 240 && seconds <= 1200;
+            if (filter === 'long') return seconds > 1200;
+            return true;
+        }
+
+        // Converte un videoRenderer grezzo di ytInitialData nel formato interno che il
+        // resto dell'app già si aspetta (stesso shape della YouTube Data API v3).
+        function videoRendererToItem(vr) {
+            if (!vr || !vr.videoId) return null;
+            const thumbs = vr.thumbnail?.thumbnails || [];
+            const best = thumbs[thumbs.length - 1];
+            return {
+                id: { videoId: vr.videoId },
+                snippet: {
+                    title: (vr.title?.runs || []).map(r => r.text).join(''),
+                    channelTitle: (vr.ownerText?.runs || vr.longBylineText?.runs || []).map(r => r.text).join(''),
+                    thumbnails: {
+                        high: best ? { url: best.url } : undefined,
+                        default: { url: `https://i.ytimg.com/vi/${vr.videoId}/default.jpg` }
+                    }
+                },
+                _lengthSeconds: parseDurationToSeconds(vr.lengthText?.simpleText)
+            };
+        }
+
+        // Naviga la struttura della pagina risultati, ignorando shelf/canali/playlist e
+        // annunci, tenendo solo i video veri e propri; recupera anche il continuation
+        // token per poter caricare altre pagine di risultati (usato da "carica altri").
+        function walkSearchResults(data) {
+            const items = [];
+            let continuation = null;
             try {
-                let url = `${YT_FALLBACK_WORKER_URL}/search?q=${encodeURIComponent(params.q || '')}`;
-                if (params.maxResults) url += `&maxResults=${params.maxResults}`;
-                if (params.pageToken) url += `&pageToken=${encodeURIComponent(params.pageToken)}`;
-                if (params.videoDuration) url += `&videoDuration=${params.videoDuration}`;
-                const res = await fetch(url);
-                const data = await res.json();
-                if (data.error) throw new Error(data.error);
-                return data; // già normalizzato: {items:[...], nextPageToken}
+                const sections = data.contents.twoColumnSearchResultsRenderer.primaryContents.sectionListRenderer.contents;
+                sections.forEach(section => {
+                    (section.itemSectionRenderer?.contents || []).forEach(c => {
+                        if (c.videoRenderer) items.push(c.videoRenderer);
+                    });
+                    if (section.continuationItemRenderer) {
+                        continuation = section.continuationItemRenderer.continuationEndpoint?.continuationCommand?.token || null;
+                    }
+                });
             } catch (err) {
-                console.warn('Anche il Worker di backup ha fallito:', err);
+                console.warn('Struttura pagina risultati inattesa:', err);
             }
+            return { items, continuation };
+        }
 
-            return null; // tutte e tre le fonti hanno fallito
+        // Stato della paginazione via scraping: chiave/versione del client "innertube"
+        // usato internamente da youtube.com stesso per le proprie chiamate di ricerca
+        // (pubbliche, presenti nel sorgente della pagina - non è la Data API a pagamento).
+        let scrapeInnertubeKey = null, scrapeClientVersion = null;
+
+        async function youtubeSearchFirstPage(query) {
+            const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
+            const html = await (await fetchViaScrapeProxies(searchUrl)).text();
+            const data = extractJsonVar(html, 'ytInitialData');
+            if (!data) throw new Error('Pagina risultati non riconosciuta.');
+            scrapeInnertubeKey = (html.match(/"INNERTUBE_API_KEY":"([^"]+)"/) || [])[1] || null;
+            scrapeClientVersion = (html.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/) || [])[1] || null;
+            return walkSearchResults(data);
+        }
+
+        async function youtubeSearchContinuation(continuation) {
+            if (!continuation || !scrapeInnertubeKey) return { items: [], continuation: null };
+            const endpoint = `https://www.youtube.com/youtubei/v1/search?key=${scrapeInnertubeKey}`;
+            const body = JSON.stringify({
+                context: { client: { clientName: 'WEB', clientVersion: scrapeClientVersion || '2.20240101.00.00' } },
+                continuation
+            });
+            const data = await (await fetchViaScrapeProxies(endpoint, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body
+            })).json();
+            const items = []; let nextContinuation = null;
+            try {
+                (data.onResponseReceivedCommands || []).forEach(action => {
+                    (action.appendContinuationItemsAction?.continuationItems || []).forEach(c => {
+                        (c.itemSectionRenderer?.contents || []).forEach(c2 => { if (c2.videoRenderer) items.push(c2.videoRenderer); });
+                        if (c.continuationItemRenderer) {
+                            nextContinuation = c.continuationItemRenderer.continuationEndpoint?.continuationCommand?.token || null;
+                        }
+                    });
+                });
+            } catch (err) { console.warn('Struttura continuazione inattesa:', err); }
+            return { items, continuation: nextContinuation };
+        }
+
+        // Punto d'ingresso unico usato da performSearch: stesso formato di ritorno di
+        // prima ({items, nextPageToken}), così il resto del codice non cambia.
+        async function youtubeSearch(params) {
+            try {
+                const { items, continuation } = params.pageToken
+                    ? await youtubeSearchContinuation(params.pageToken)
+                    : await youtubeSearchFirstPage(params.q);
+
+                let tracks = items.map(videoRendererToItem).filter(Boolean);
+
+                if (params.videoDuration) {
+                    tracks = tracks.filter(t => matchesDurationFilter(t._lengthSeconds, params.videoDuration));
+                }
+                // Nota: il filtro per data di pubblicazione (publishedAfter) non è applicato
+                // qui: la pagina pubblica riporta solo un testo relativo ("2 settimane fa"),
+                // non una data esatta confrontabile in modo affidabile.
+
+                if (params.maxResults) tracks = tracks.slice(0, params.maxResults);
+
+                return { items: tracks, nextPageToken: continuation || '' };
+            } catch (err) {
+                console.warn('Ricerca YouTube via scraping fallita:', err);
+                return null;
+            }
         }
 
         async function performSearch(isLoadMore = false) {
@@ -2357,7 +2456,7 @@
                 const data = await youtubeSearch(params);
 
                 if (!data) {
-                    throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
+                    throw new Error('Nessun proxy CORS disponibile in questo momento');
                 }
 
                 document.getElementById('apiErrorBadge')?.classList.add('hidden');
@@ -2382,7 +2481,7 @@
                         <div class="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-center max-w-xs mx-auto">
                             <i class="fa-solid fa-triangle-exclamation text-red-500 text-lg mb-2"></i>
                             <p class="text-xs font-bold text-red-400">Ricerca YouTube non disponibile</p>
-                            <p class="text-[10px] mt-1 custom-text-muted">Chiavi API non valide o quota esaurita, e anche il fallback di backup non ha risposto.</p>
+                            <p class="text-[10px] mt-1 custom-text-muted">I proxy pubblici usati per la ricerca non hanno risposto. Riprova tra poco.</p>
                         </div>
                     `;
                 }
