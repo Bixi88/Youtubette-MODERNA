@@ -2274,16 +2274,28 @@
             url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`
         ];
 
-        async function fetchViaScrapeProxies(targetUrl, options) {
+        async function fetchViaScrapeProxies(targetUrl, options, validate = () => true) {
+            let lastErr = null;
             for (const buildProxyUrl of YT_SCRAPE_PROXIES) {
-                try {
-                    const res = await fetch(buildProxyUrl(targetUrl), options);
-                    if (res.ok) return res;
-                } catch (err) {
-                    console.warn('Proxy CORS non disponibile, provo il successivo:', err);
+                // Due tentativi per proxy: un fallimento di rete può essere solo momentaneo
+                // (proxy pubblico sovraccarico), vale la pena riprovare prima di scartarlo.
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    try {
+                        const res = await fetch(buildProxyUrl(targetUrl), options);
+                        if (!res.ok) { lastErr = new Error(`HTTP ${res.status}`); continue; }
+                        const text = await res.text();
+                        // Un proxy con server in UE può far comparire a YouTube la pagina di
+                        // consenso cookie invece dei risultati veri: risponde comunque 200,
+                        // quindi va validato il contenuto, non solo lo status HTTP.
+                        if (validate(text)) return text;
+                        lastErr = new Error('Risposta non valida (probabile pagina di consenso cookie).');
+                    } catch (err) {
+                        lastErr = err;
+                        console.warn('Proxy CORS fallito, riprovo:', err);
+                    }
                 }
             }
-            throw new Error('Nessun proxy CORS disponibile in questo momento.');
+            throw lastErr || new Error('Nessun proxy CORS disponibile in questo momento.');
         }
 
         function extractJsonVar(html, varName) {
@@ -2358,7 +2370,7 @@
 
         async function youtubeSearchFirstPage(query) {
             const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-            const html = await (await fetchViaScrapeProxies(searchUrl)).text();
+            const html = await fetchViaScrapeProxies(searchUrl, undefined, text => text.includes('ytInitialData'));
             const data = extractJsonVar(html, 'ytInitialData');
             if (!data) throw new Error('Pagina risultati non riconosciuta.');
             scrapeInnertubeKey = (html.match(/"INNERTUBE_API_KEY":"([^"]+)"/) || [])[1] || null;
@@ -2373,9 +2385,16 @@
                 context: { client: { clientName: 'WEB', clientVersion: scrapeClientVersion || '2.20240101.00.00' } },
                 continuation
             });
-            const data = await (await fetchViaScrapeProxies(endpoint, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body
-            })).json();
+            let data;
+            try {
+                const text = await fetchViaScrapeProxies(endpoint, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body
+                }, t => { try { JSON.parse(t); return true; } catch { return false; } });
+                data = JSON.parse(text);
+            } catch (err) {
+                console.warn('Continuazione ricerca fallita:', err);
+                return { items: [], continuation: null };
+            }
             const items = []; let nextContinuation = null;
             try {
                 (data.onResponseReceivedCommands || []).forEach(action => {
@@ -2394,14 +2413,35 @@
         // prima ({items, nextPageToken}), così il resto del codice non cambia.
         async function youtubeSearch(params) {
             try {
-                const { items, continuation } = params.pageToken
-                    ? await youtubeSearchContinuation(params.pageToken)
-                    : await youtubeSearchFirstPage(params.q);
+                let items, continuation;
+                if (params.pageToken) {
+                    ({ items, continuation } = await youtubeSearchContinuation(params.pageToken));
+                } else {
+                    ({ items, continuation } = await youtubeSearchFirstPage(params.q));
+                }
 
-                let tracks = items.map(videoRendererToItem).filter(Boolean);
+                const mapAndFilter = raw => {
+                    let mapped = raw.map(videoRendererToItem).filter(Boolean);
+                    if (params.videoDuration) mapped = mapped.filter(t => matchesDurationFilter(t._lengthSeconds, params.videoDuration));
+                    return mapped;
+                };
 
-                if (params.videoDuration) {
-                    tracks = tracks.filter(t => matchesDurationFilter(t._lengthSeconds, params.videoDuration));
+                let tracks = mapAndFilter(items);
+
+                // La prima sezione della pagina pubblica (o una singola pagina di
+                // continuazione) contiene tipicamente 18-20 video, meno se poi si filtra
+                // per durata: invece di restituire una lista corta, incateniamo altre
+                // pagine di continuazione finché non si raggiunge il numero richiesto,
+                // la ricerca si esaurisce, o si supera un tetto di sicurezza (evita di
+                // sparare troppe richieste per una ricerca di nicchia con pochi risultati).
+                const wanted = params.maxResults || tracks.length;
+                const MAX_EXTRA_PAGES = 6;
+                let extraPages = 0;
+                while (tracks.length < wanted && continuation && extraPages < MAX_EXTRA_PAGES) {
+                    extraPages++;
+                    const more = await youtubeSearchContinuation(continuation);
+                    continuation = more.continuation;
+                    tracks = tracks.concat(mapAndFilter(more.items));
                 }
                 // Nota: il filtro per data di pubblicazione (publishedAfter) non è applicato
                 // qui: la pagina pubblica riporta solo un testo relativo ("2 settimane fa"),
