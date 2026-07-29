@@ -582,9 +582,6 @@
         </section>
 
         <div id="ytPlayerContainer" class="absolute top-0 left-0 w-1 h-1 opacity-0 pointer-events-none"></div>
-        <!-- Secondo player, invisibile e sempre muto: serve solo a pre-bufferizzare in
-             anticipo il prossimo brano (vedi preloadNextTrack), non è mai quello ascoltato. -->
-        <div id="ytPreloadPlayerContainer" class="absolute top-0 left-0 w-1 h-1 opacity-0 pointer-events-none"></div>
     </main>
 
     <!-- Mini Player -->
@@ -905,123 +902,12 @@
         document.getElementsByTagName('script')[0].parentNode.insertBefore(tag, document.getElementsByTagName('script')[0]);
 
         let player;
-        // --- Preload del brano successivo (vedi risposta alla richiesta di velocizzare l'avvio) ---
-        // preloadPlayer: secondo player nascosto sempre muto, usato solo per "cueVideoById" il
-        // prossimo brano in anticipo, così quando lo si raggiunge davvero è già bufferizzato.
-        // preloadedIndex/preloadedVideoId: quale brano (indice + id video) è attualmente pronto
-        // nel preloadPlayer, per sapere se possiamo scambiarlo con quello attivo o no.
-        let preloadPlayer;
-        let preloadedIndex = -1;
-        let preloadedVideoId = null;
-        let preloadDebounceTimer = null;
-
         window.onYouTubeIframeAPIReady = function() {
             player = new YT.Player('ytPlayerContainer', {
                 height: '100%', width: '100%', videoId: '',
                 playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'modestbranding': 1, 'rel': 0, 'iv_load_policy': 3 },
                 events: { 'onReady': onPlayerReady, 'onStateChange': onPlayerStateChange }
             });
-            preloadPlayer = new YT.Player('ytPreloadPlayerContainer', {
-                height: '100%', width: '100%', videoId: '',
-                playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'modestbranding': 1, 'rel': 0, 'iv_load_policy': 3 },
-                events: { 'onReady': onPreloadPlayerReady, 'onStateChange': onPreloadPlayerStateChange }
-            });
-        }
-
-        function onPreloadPlayerReady(event) {
-            try { event.target.mute(); } catch (e) {}
-        }
-
-        // Il preloadPlayer non è mai quello in ascolto (resta sempre muto e in pausa/cued):
-        // i suoi cambi di stato non devono toccare icone, media session o avanzamento brano.
-        function onPreloadPlayerStateChange(event) {}
-
-        // Resetta lo stato del preload quando cambia del tutto la lista in ascolto (nuova
-        // ricerca o nuovo import Spotify): un id pre-bufferizzato della lista precedente
-        // non ha più senso e andrebbe scambiato per errore col brano sbagliato.
-        function resetPreloadState() {
-            clearTimeout(preloadDebounceTimer);
-            preloadedIndex = -1;
-            preloadedVideoId = null;
-            try { preloadPlayer?.stopVideo?.(); } catch (e) {}
-        }
-
-        // Determina l'indice del brano che verrebbe dopo "index", solo se già presente in
-        // lista: se servisse caricare un'altra pagina di risultati o si tornerebbe all'inizio,
-        // non precarichiamo (per non complicare la logica di paginazione/loop).
-        function getNextPreloadableIndex(index) {
-            if (appState.tracks.length === 0) return null;
-            const nextIdx = index + 1;
-            if (nextIdx >= appState.tracks.length) return null;
-            return nextIdx;
-        }
-
-        // Aspetta qualche secondo di riproduzione stabile prima di avviare il preload: se
-        // l'utente sta saltando velocemente da un brano all'altro, non ha senso bufferizzare
-        // (o peggio, cercare su YouTube l'id di) un brano che magari non raggiungerà mai.
-        function schedulePreloadNext(index) {
-            clearTimeout(preloadDebounceTimer);
-            preloadDebounceTimer = setTimeout(() => {
-                if (appState.currentIndex === index) preloadNextTrack(index);
-            }, 4000);
-        }
-
-        async function preloadNextTrack(index) {
-            if (!preloadPlayer?.cueVideoById) return;
-            const nextIdx = getNextPreloadableIndex(index);
-            if (nextIdx === null) return;
-
-            const nextTrackObj = appState.tracks[nextIdx];
-            if (!nextTrackObj) return;
-            if (preloadedIndex === nextIdx && preloadedVideoId === nextTrackObj.id) return; // già fatto
-
-            let videoId = nextTrackObj.id;
-            if (!videoId) {
-                // Brano da playlist Spotify non ancora risolto: risolviamo l'id in anticipo,
-                // in background, senza toccare l'interfaccia (esattamente la stessa ricerca
-                // che accadrebbe comunque quando l'utente raggiunge il brano: qui la
-                // anticipiamo solo di qualche secondo, non se ne fanno di più).
-                const resolved = await resolveYoutubeIdForTrack(nextTrackObj, nextIdx);
-                if (appState.currentIndex !== index || !resolved) return; // brano cambiato o non trovato nel frattempo
-                videoId = nextTrackObj.id;
-            }
-            if (!videoId || appState.currentIndex !== index) return;
-
-            try {
-                preloadPlayer.cueVideoById({ videoId, suggestedQuality: 'small' });
-                preloadedIndex = nextIdx;
-                preloadedVideoId = videoId;
-            } catch (e) {}
-        }
-
-        // Se il brano che stiamo per riprodurre è esattamente quello già pre-bufferizzato,
-        // scambiamo i due player invece di ripartire da zero: quello "pronto" diventa il
-        // player attivo e parte all'istante, quello appena lasciato diventa il nuovo slot
-        // di preload per il brano successivo.
-        function trySwapWithPreloadedPlayer(index, track) {
-            if (!player || !preloadPlayer) return false;
-            if (preloadedIndex !== index || !track.id || preloadedVideoId !== track.id) return false;
-            try {
-                player.removeEventListener('onStateChange', onPlayerStateChange);
-                preloadPlayer.removeEventListener('onStateChange', onPreloadPlayerStateChange);
-
-                const tmp = player;
-                player = preloadPlayer;
-                preloadPlayer = tmp;
-
-                player.addEventListener('onStateChange', onPlayerStateChange);
-                preloadPlayer.addEventListener('onStateChange', onPreloadPlayerStateChange);
-
-                player.unMute();
-                player.setVolume(document.getElementById('volumeSlider')?.value ?? 100);
-                player.playVideo();
-
-                preloadedIndex = -1;
-                preloadedVideoId = null;
-                return true;
-            } catch (e) {
-                return false;
-            }
         }
 
         function onPlayerReady(event) {
@@ -1044,7 +930,6 @@
                 setPlayIconState(true);
                 updateDuration(); 
                 updateMediaSessionState(true);
-                schedulePreloadNext(appState.currentIndex);
             } else if (event.data == YT.PlayerState.PAUSED) {
                 appState.isPlaying = false;
                 setPlayIconState(false);
@@ -1776,7 +1661,7 @@
         let activeScrubType = null;
 
         function startScrub(e) {
-            if (!player?.getDuration || appState.currentIndex === -1) return;
+            if (!player?.getDuration || nowPlayingIndex === -1) return;
             isScrubbing = true;
             activeScrubType = 'large';
             progressBar.classList.add('scrubbing');
@@ -1784,7 +1669,7 @@
         }
 
         function startMiniScrub(e) {
-            if (!player?.getDuration || appState.currentIndex === -1) return;
+            if (!player?.getDuration || nowPlayingIndex === -1) return;
             isScrubbing = true;
             activeScrubType = 'mini';
             updateScrubPositionGeneral(e);
@@ -2201,8 +2086,8 @@
         }
 
         async function redirectToDownload() {
-            if (appState.currentIndex === -1) return;
-            const currentTrack = appState.tracks[appState.currentIndex];
+            if (nowPlayingIndex === -1) return;
+            const currentTrack = nowPlayingTracks[nowPlayingIndex];
             if (!currentTrack || !currentTrack.id) return;
             
             const youtubeUrl = `https://www.youtube.com/watch?v=${currentTrack.id}`;
@@ -2454,7 +2339,6 @@
                 currentListSource = 'youtube';
                 showResultsView(query);
                 appState.tracks = []; appState.currentIndex = -1; nextSearchPageToken = '';
-                resetPreloadState();
                 toggleDownloadButtons(false);
                 document.getElementById('trackList').innerHTML = '';
                 if (resultsStatusText) resultsStatusText.classList.add('hidden');
@@ -2669,7 +2553,6 @@
             if (!playlistId) {
                 showResultsView('Risultati');
                 appState.tracks = []; appState.currentIndex = -1;
-                resetPreloadState();
                 document.getElementById('trackList').innerHTML = '';
                 if (resultsStatusText) {
                     resultsStatusText.classList.remove('hidden');
@@ -2682,7 +2565,6 @@
             nextSearchPageToken = '';
             showResultsView('Playlist Spotify');
             appState.tracks = []; appState.currentIndex = -1;
-            resetPreloadState();
             toggleDownloadButtons(false);
             document.getElementById('trackList').innerHTML = '';
             if (resultsStatusText) {
@@ -2772,7 +2654,7 @@
         // l'utente lo tocca davvero per riprodurlo: così una playlist da 100 brani costa
         // al massimo 1 chiamata di ricerca per ogni brano effettivamente ascoltato, non 100
         // chiamate subito all'import.
-        async function resolveYoutubeIdForTrack(track, index) {
+        async function resolveYoutubeIdForTrack(track, index, updateRowUI = true) {
             const query = `${track.title} ${track.channel}`;
 
             try {
@@ -2794,19 +2676,25 @@
                 document.getElementById('apiErrorBadge')?.classList.add('hidden');
                 document.getElementById('modalApiBadgeError')?.classList.add('hidden');
 
-                const img = document.getElementById(`track-img-${index}`);
-                if (img) {
-                    if (track.spotifyImport) {
-                        // Copertina fissa (iTunes se trovata, altrimenti il ripiego YouTube
-                        // appena assegnato sopra): niente displayArtwork qui, altrimenti
-                        // verrebbe sovrascritta di nuovo con la miniatura del video.
-                        if (track.thumbnail) img.src = track.thumbnail;
-                    } else {
-                        displayArtwork(img, track.id);
+                // updateRowUI è false quando il brano risolto non appartiene alla lista
+                // attualmente mostrata a schermo (es. sta suonando in background mentre
+                // l'utente sfoglia un'altra playlist): in quel caso `track-img-${index}`
+                // apparterrebbe a una riga della lista SBAGLIATA, quindi non la tocchiamo.
+                if (updateRowUI) {
+                    const img = document.getElementById(`track-img-${index}`);
+                    if (img) {
+                        if (track.spotifyImport) {
+                            // Copertina fissa (iTunes se trovata, altrimenti il ripiego YouTube
+                            // appena assegnato sopra): niente displayArtwork qui, altrimenti
+                            // verrebbe sovrascritta di nuovo con la miniatura del video.
+                            if (track.thumbnail) img.src = track.thumbnail;
+                        } else {
+                            displayArtwork(img, track.id);
+                        }
                     }
+                    const badge = img?.parentElement?.querySelector('.fa-spotify');
+                    if (badge) badge.remove();
                 }
-                const badge = img?.parentElement?.querySelector('.fa-spotify');
-                if (badge) badge.remove();
 
                 // Salva in cache: se questo brano ricompare (stessa o altra playlist),
                 // il prossimo avvio lo riprodurrà subito senza rifare la ricerca YouTube.
@@ -2915,15 +2803,29 @@
             }
         }
 
-        async function loadTrack(index) {
-            if (index < 0 || index >= appState.tracks.length) return;
+        // Coda realmente "in ascolto": indipendente da cosa l'utente sta sfogliando in quel
+        // momento. Prima la progress bar, il tasto play/pausa e la media session leggevano
+        // direttamente appState.tracks/appState.currentIndex, che però rappresentano la lista
+        // MOSTRATA a schermo: aprire una playlist diversa mentre un brano suonava azzerava
+        // quello stato (currentIndex a -1) pur lasciando l'audio in corso, bloccando tutta
+        // l'interfaccia del player. Questa coda separata resta valida anche quando si sfoglia
+        // altro.
+        let nowPlayingTracks = [];
+        let nowPlayingIndex = -1;
 
-            const track = appState.tracks[index];
+        // sourceTracks: la lista da cui viene il brano da caricare. Di default è la lista
+        // attualmente mostrata (appState.tracks, es. quando l'utente tocca una riga), ma
+        // nextTrack/prevTrack la passano esplicitamente come nowPlayingTracks, perché quella
+        // potrebbe non essere più la lista sullo schermo (l'utente nel frattempo può essere
+        // passato a sfogliare un'altra playlist).
+        async function loadTrack(index, sourceTracks = appState.tracks) {
+            if (index < 0 || index >= sourceTracks.length) return;
 
-            // Il preload eventualmente già pianificato riguardava il brano che stiamo
-            // lasciando: lo stato del preloadPlayer resta valido finché punta al brano
-            // giusto, ma il timer di pianificazione va ricalcolato sul nuovo brano.
-            clearTimeout(preloadDebounceTimer);
+            const track = sourceTracks[index];
+            // Vero solo se la coda che stiamo caricando è anche quella attualmente mostrata a
+            // schermo: solo in quel caso ha senso toccare appState.currentIndex e le righe DOM
+            // della lista (altrimenti apparterrebbero a una lista diversa, sfogliata dopo).
+            const isBrowsingListPlaying = (sourceTracks === appState.tracks);
 
             // Ferma SUBITO l'audio del brano uscente: se il nuovo brano ha già un id
             // YouTube, loadVideoById() poco sotto lo sostituirà comunque all'istante,
@@ -2935,24 +2837,34 @@
 
             // CARICAMENTO SUCESSIVO PREVENTIVO ED ESCLUSIVO (solo per liste da ricerca YouTube,
             // le playlist importate da Spotify non hanno paginazione YouTube):
-            // Scatta solo all'inizio dell'ultimo brano della lista (brani 25, 50, etc. - index === appState.tracks.length - 1)
-            if (currentListSource === 'youtube' && index === appState.tracks.length - 1 && nextSearchPageToken && !isFetchingMore) {
+            // Scatta solo all'inizio dell'ultimo brano della lista (brani 25, 50, etc. - index === sourceTracks.length - 1),
+            // e solo se questa è la lista mostrata: se stiamo suonando in background una lista
+            // diversa da quella sfogliata, appState.tracks appartiene a tutt'altro e non va
+            // toccato da qui.
+            if (isBrowsingListPlaying && currentListSource === 'youtube' && index === sourceTracks.length - 1 && nextSearchPageToken && !isFetchingMore) {
                 performSearch(true);
             }
 
-            // Aggiorna SUBITO titolo, copertina ed evidenziazione riga usando i dati già
-            // disponibili (anche per un brano Spotify non ancora risolto su YouTube), così lo
-            // swipe/cambio brano è istantaneo e non mostra più il titolo del brano precedente
-            // in attesa che finisca la ricerca YouTube.
-            if (appState.currentIndex !== -1 && appState.currentIndex !== index) {
-                const oldRow = document.getElementById(`track-row-${appState.currentIndex}`);
-                if (oldRow) {
-                    const oldText = oldRow.querySelector('p.text-sm');
-                    if (oldText) { oldText.classList.remove('custom-text-accent', 'font-black'); oldText.classList.add('text-white'); }
+            if (isBrowsingListPlaying) {
+                // Aggiorna SUBITO titolo, copertina ed evidenziazione riga usando i dati già
+                // disponibili (anche per un brano Spotify non ancora risolto su YouTube), così lo
+                // swipe/cambio brano è istantaneo e non mostra più il titolo del brano precedente
+                // in attesa che finisca la ricerca YouTube.
+                if (appState.currentIndex !== -1 && appState.currentIndex !== index) {
+                    const oldRow = document.getElementById(`track-row-${appState.currentIndex}`);
+                    if (oldRow) {
+                        const oldText = oldRow.querySelector('p.text-sm');
+                        if (oldText) { oldText.classList.remove('custom-text-accent', 'font-black'); oldText.classList.add('text-white'); }
+                    }
                 }
+                appState.currentIndex = index;
             }
 
-            appState.currentIndex = index;
+            // Questo diventa ufficialmente il brano in ascolto: resta valido anche se poi
+            // l'utente sfoglia un'altra lista (che sovrascriverà appState.tracks, ma non
+            // questa coda).
+            nowPlayingTracks = sourceTracks;
+            nowPlayingIndex = index;
 
             // Azzeriamo SUBITO barra di avanzamento e tempi: altrimenti resterebbero visibili
             // quelli della canzone uscente per l'istante in cui il player YouTube sta ancora
@@ -3002,37 +2914,42 @@
             document.getElementById('miniPlayerChannel').innerText = track.channel;
             checkAndApplyMiniMarquee(track.title);
 
-            const newRow = document.getElementById(`track-row-${index}`);
-            if (newRow) {
-                const newText = newRow.querySelector('p.text-sm');
-                if (newText) { newText.classList.remove('text-white'); newText.classList.add('custom-text-accent', 'font-black'); }
-                // Lo scroll automatico alla riga va fatto SOLO se la vista playlist è
-                // davvero visibile in quel momento: se il brano viene cambiato dalla
-                // home (es. swipe sul mini player), la vista risultati è nascosta fuori
-                // schermo (traslata) e forzare lo scroll su un suo elemento rompeva il
-                // layout. Da home il brano cambia "silenziosamente"; se poi si riapre la
-                // playlist, il brano attivo è comunque già evidenziato correttamente.
-                const viewsSlider = document.getElementById('viewsSlider');
-                if (viewsSlider && viewsSlider.classList.contains('showing-results')) {
-                    newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            if (isBrowsingListPlaying) {
+                const newRow = document.getElementById(`track-row-${index}`);
+                if (newRow) {
+                    const newText = newRow.querySelector('p.text-sm');
+                    if (newText) { newText.classList.remove('text-white'); newText.classList.add('custom-text-accent', 'font-black'); }
+                    // Lo scroll automatico alla riga va fatto SOLO se la vista playlist è
+                    // davvero visibile in quel momento: se il brano viene cambiato dalla
+                    // home (es. swipe sul mini player), la vista risultati è nascosta fuori
+                    // schermo (traslata) e forzare lo scroll su un suo elemento rompeva il
+                    // layout. Da home il brano cambia "silenziosamente"; se poi si riapre la
+                    // playlist, il brano attivo è comunque già evidenziato correttamente.
+                    const viewsSlider = document.getElementById('viewsSlider');
+                    if (viewsSlider && viewsSlider.classList.contains('showing-results')) {
+                        newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
                 }
+                checkAndApplyMarquee();
             }
-
-            checkAndApplyMarquee();
             toggleDownloadButtons(true);
 
             // Solo ORA, se manca ancora l'id YouTube (brano da playlist Spotify mai ascoltato
             // prima), lo risolviamo: l'interfaccia sopra è già aggiornata, quindi questa attesa
             // non blocca più l'animazione di cambio brano, riguarda solo l'avvio dell'audio.
             if (!track.id) {
-                const row = document.getElementById(`track-row-${index}`);
-                if (row) row.classList.add('opacity-50', 'pointer-events-none');
-                const resolved = await resolveYoutubeIdForTrack(track, index);
+                let row = null;
+                if (isBrowsingListPlaying) {
+                    row = document.getElementById(`track-row-${index}`);
+                    if (row) row.classList.add('opacity-50', 'pointer-events-none');
+                }
+                const resolved = await resolveYoutubeIdForTrack(track, index, isBrowsingListPlaying);
                 if (row) row.classList.remove('opacity-50', 'pointer-events-none');
 
-                // Se nel frattempo l'utente è già passato a un altro brano, non riprodurre
-                // questo (arriverebbe "in ritardo" sopra quello attuale).
-                if (appState.currentIndex !== index) return;
+                // Se nel frattempo l'utente è già passato a un altro brano (anche cambiando
+                // lista in ascolto), non riprodurre questo (arriverebbe "in ritardo" sopra
+                // quello attuale).
+                if (nowPlayingTracks !== sourceTracks || nowPlayingIndex !== index) return;
                 if (!resolved) return; // nessun video trovato/errore: non riproduce nulla
 
                 if (track.spotifyImport) {
@@ -3053,12 +2970,7 @@
             // subito una qualità bassa, YouTube deve bufferizzare molti meno dati prima di
             // poter iniziare la riproduzione: è il punto che pesa di più sull'attesa "parte
             // la canzone", più della semplice velocità di rete.
-            // Se questo è esattamente il brano che avevamo già pre-bufferizzato in background
-            // (preloadNextTrack), lo scambiamo con quello attivo: è già pronto, parte
-            // all'istante invece di ripartire da un buffering a zero.
-            if (!trySwapWithPreloadedPlayer(index, track)) {
-                if (player?.loadVideoById) player.loadVideoById({ videoId: track.id, suggestedQuality: 'small' });
-            }
+            if (player?.loadVideoById) player.loadVideoById({ videoId: track.id, suggestedQuality: 'small' });
             updateMediaSessionMetadata(track);
         }
 
@@ -3116,27 +3028,33 @@
         }
 
         function togglePlay() {
-            if (!player || appState.currentIndex === -1) return;
+            if (!player || nowPlayingIndex === -1) return;
             if (appState.isPlaying) player.pauseVideo(); else player.playVideo();
         }
 
         function nextTrack() {
-            if (appState.tracks.length === 0) return;
-            let nextIdx = appState.currentIndex + 1;
-            if (nextIdx >= appState.tracks.length) {
-                if (nextSearchPageToken) {
-                    performSearch(true).then(() => { if (appState.tracks[nextIdx]) loadTrack(nextIdx); });
-                } else loadTrack(0);
+            if (nowPlayingTracks.length === 0) return;
+            let nextIdx = nowPlayingIndex + 1;
+            if (nextIdx >= nowPlayingTracks.length) {
+                // La ricerca di altri risultati (paginazione) tocca appState.tracks: ha senso
+                // farla solo se la coda in ascolto è anche la lista attualmente sfogliata,
+                // altrimenti appartiene a un'altra playlist e andrebbe a modificare la lista
+                // sbagliata.
+                if (nowPlayingTracks === appState.tracks && nextSearchPageToken) {
+                    performSearch(true).then(() => { if (appState.tracks[nextIdx]) loadTrack(nextIdx, appState.tracks); });
+                } else {
+                    loadTrack(0, nowPlayingTracks);
+                }
             } else {
-                loadTrack(nextIdx);
+                loadTrack(nextIdx, nowPlayingTracks);
             }
         }
 
         function prevTrack() {
-            if (appState.tracks.length === 0) return;
-            let prevIdx = appState.currentIndex - 1;
-            if (prevIdx < 0) prevIdx = appState.tracks.length - 1;
-            loadTrack(prevIdx);
+            if (nowPlayingTracks.length === 0) return;
+            let prevIdx = nowPlayingIndex - 1;
+            if (prevIdx < 0) prevIdx = nowPlayingTracks.length - 1;
+            loadTrack(prevIdx, nowPlayingTracks);
         }
 
         function startProgressLoop() {
@@ -3146,7 +3064,7 @@
                     // con i dati del video precedente: confrontando l'id effettivamente
                     // caricato con quello della traccia corrente evitiamo di mostrare quel
                     // minutaggio "residuo" della canzone uscente.
-                    const currentTrack = appState.tracks[appState.currentIndex];
+                    const currentTrack = nowPlayingTracks[nowPlayingIndex];
                     const activeVideoId = player.getVideoData ? player.getVideoData().video_id : null;
                     if (!currentTrack || !currentTrack.id || activeVideoId !== currentTrack.id) return;
 
