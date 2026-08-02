@@ -28,7 +28,7 @@
            ink-3      #221E27  — input/superfici ancora più elevate
            paper      #F3EFE6  — testo primario
            mute       #8B8794  — testo secondario
-           signal     #FF9A21  — UNICO accento: arancione
+           signal     #F3EFE6  — UNICO accento: bianco (stesso tono del testo "paper")
            bg-grad    #1D164A → #000000 — gradiente viola/nero dello sfondo
            ============================================================ */
         :root {
@@ -38,7 +38,7 @@
             --bg-gradient: linear-gradient(180deg, var(--bg-main) 0%, var(--bg-gradient-top) 35%, var(--bg-gradient-top) 55%, var(--bg-main) 100%);
             --bg-card: rgba(24, 21, 28, 0.72);
             --bg-input: #221E27;
-            --accent: #FF9A21;
+            --accent: #F3EFE6;
             --text-main: #F3EFE6;
             --text-muted: #8B8794;
         }
@@ -276,6 +276,15 @@
             opacity: 1;
         }
 
+        /* ================= Copertine in bianco e nero (tutte le artwork dell'app) ================= */
+        .qcard .circle,
+        .settings-playlist-thumb,
+        #miniPlayerImg,
+        #sheetArtworkImg,
+        .track-thumb-img {
+            filter: grayscale(1);
+        }
+
         .custom-bg-main { background: var(--bg-gradient); }
         .custom-bg-card { background: var(--bg-card); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
         .custom-bg-input { background-color: var(--bg-input); }
@@ -397,7 +406,7 @@
         #searchInput { flex:1; border:none !important; outline:none !important; background:transparent !important; font-family:'Inter',sans-serif; font-size:13.5px !important; font-weight:500; color:#1c1a20 !important; width:auto !important; opacity:1 !important; padding:0 !important; height:auto !important; }
         #searchInput::placeholder { color:#8b8794; }
         .search-pill .filter-btn { color:#4a4550; font-size:15px; flex:0 0 auto; display:flex; align-items:center; padding:2px; width:auto !important; opacity:1 !important; background:none !important; }
-        .search-pill .filter-btn.active { color:#B8791F; }
+        .search-pill .filter-btn.active { color:#1c1a20; }
 
         .filter-drop {
             background:var(--bg-card); border-radius:18px; border:1px solid var(--hair, rgba(243,239,230,0.08));
