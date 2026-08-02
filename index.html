@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="color-scheme" content="dark">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>YouTubette - Player</title>
 
     <!-- Stile critico: definito PRIMA di script/link esterni (Tailwind CDN, Font Awesome)
@@ -41,6 +41,18 @@
             overflow: hidden;
             background: var(--bg-gradient);
             color: var(--text-main);
+        }
+
+        /* Con viewport-fit=cover la pagina si estende sotto le barre di sistema
+           (status bar in alto, gesture/nav bar in basso): così è lo sfondo
+           dell'app (--bg-gradient) a comparire lì invece del "buco" nero del
+           browser. Aggiungo le safe-area come extra al padding di base (p-4)
+           così i contenuti restano leggibili e non finiscono sotto le barre. */
+        body.custom-bg-main {
+            padding-top: calc(1rem + env(safe-area-inset-top, 0px)) !important;
+            padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
+            padding-left: calc(1rem + env(safe-area-inset-left, 0px)) !important;
+            padding-right: calc(1rem + env(safe-area-inset-right, 0px)) !important;
         }
 
         /* Fallback locale per .hidden: Tailwind è caricato da CDN esterno e la sua
