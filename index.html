@@ -2,6 +2,15 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
+    <script>
+        // Applicata SUBITO (prima di qualsiasi CSS/paint) per evitare il flash del tema
+        // sbagliato all'apertura: stessa logica dello sfondo critico qui sotto.
+        try {
+            if (localStorage.getItem('youtubette_amoled') === '1') {
+                document.documentElement.classList.add('amoled');
+            }
+        } catch (e) {}
+    </script>
     <meta name="color-scheme" content="dark">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>YouTubette - Player</title>
@@ -488,8 +497,69 @@
             0%, 100% { opacity:1; filter: drop-shadow(0 0 0 rgba(255,154,33,0)); }
             50%      { opacity:.82; filter: drop-shadow(0 0 5px rgba(255,154,33,.65)); }
         }
-    </style>
-</head>
+        /* ================= SKIN "AMOLED" (opzionale, attivabile dalle Impostazioni) =================
+           Nero puro ovunque (niente più gradiente viola) e componenti chiave "svuotati":
+           invece di sfondi colorati pieni, un bordo sottile bianco/grigio a fare da cornice,
+           ispirato alle icone outline di App Prompter. Tutto il resto dell'app (font, layout,
+           accento arancione) resta identico: cambiano solo le variabili colore + qualche bordo. */
+        html.amoled {
+            --bg-main: #000000;
+            --bg-gradient-top: #000000;
+            --bg-card: #000000;
+            --bg-input: #000000;
+        }
+        html.amoled .qcard .circle {
+            border: 1.5px solid rgba(243,239,230,0.22);
+            box-shadow: none;
+        }
+        html.amoled .qcard.latest .circle {
+            box-shadow: 0 0 0 2px var(--accent);
+            border-color: transparent;
+        }
+        html.amoled .menu-icon-btn,
+        html.amoled .update-btn,
+        html.amoled .results-header .back-btn,
+        html.amoled .settings-playlist-remove {
+            background: transparent;
+            border: 1.5px solid rgba(243,239,230,0.22);
+        }
+        html.amoled .search-pill {
+            background: #000000;
+            border: 1.5px solid rgba(243,239,230,0.25);
+        }
+        html.amoled .search-pill #searchInput { color: var(--text-main) !important; }
+        html.amoled .search-pill #searchInput::placeholder { color: var(--text-muted); }
+        html.amoled .search-pill .mag-btn,
+        html.amoled .search-pill .filter-btn { color: var(--text-main) !important; }
+        html.amoled .search-pill .filter-btn.active { color: var(--accent) !important; }
+        html.amoled .glass-panel,
+        html.amoled .settings-sheet,
+        html.amoled .filter-drop {
+            border: 1px solid rgba(243,239,230,0.16);
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+        }
+        html.amoled #modalApiKeyInput,
+        html.amoled #modalApiKeyInput2 {
+            border: 1.5px solid rgba(243,239,230,0.18) !important;
+        }
+        /* ================= Toggle skin AMOLED (pillola on/off nelle Impostazioni) ================= */
+        .amoled-toggle-row { display:flex; align-items:center; justify-content:space-between; padding:4px 2px; }
+        .amoled-toggle-row .lbl { font-size:13px; font-weight:600; color:var(--text-main); }
+        .amoled-toggle-row .sub { font-size:11px; color:var(--text-muted); margin-top:2px; }
+        .amoled-switch {
+            position:relative; width:44px; height:26px; border-radius:999px; flex:0 0 auto;
+            background: var(--bg-input); border:1.5px solid rgba(243,239,230,0.2);
+            cursor:pointer; transition: background .2s ease, border-color .2s ease;
+        }
+        .amoled-switch::after {
+            content:''; position:absolute; top:2px; left:2px; width:19px; height:19px; border-radius:50%;
+            background: var(--text-muted); transition: transform .2s cubic-bezier(0.34,1.56,0.64,1), background .2s ease;
+        }
+        .amoled-switch.on { background: var(--accent); border-color: var(--accent); }
+        .amoled-switch.on::after { transform: translateX(18px); background:#1a1305; }
+
+
 <body class="flex flex-col justify-between hidden p-4 box-border h-full custom-bg-main relative">
 
     <header class="shrink-0 z-40 relative">
@@ -738,6 +808,16 @@
             </div>
 
             <div class="mt-6 border-t border-white/5 pt-4">
+                <div class="amoled-toggle-row">
+                    <div>
+                        <div class="lbl">Tema AMOLED</div>
+                        <div class="sub">Nero puro, cornici sottili al posto degli sfondi pieni</div>
+                    </div>
+                    <div id="amoledSwitch" class="amoled-switch" role="switch" aria-checked="false"></div>
+                </div>
+            </div>
+
+            <div class="mt-6 border-t border-white/5 pt-4">
                 <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted mb-2">Playlist Recenti</label>
                 <div id="settingsPlaylistList" class="flex flex-col gap-1.5"></div>
                 <p id="settingsPlaylistEmpty" class="hidden text-xs custom-text-muted italic py-2">Nessuna playlist recente.</p>
@@ -765,6 +845,23 @@
             filterDuration: 'any'
         };
         let deferredPrompt, nextSearchPageToken = '', isFetchingMore = false;
+
+        // ================= Toggle skin AMOLED =================
+        const amoledSwitchEl = document.getElementById('amoledSwitch');
+        function setAmoled(on) {
+            document.documentElement.classList.toggle('amoled', on);
+            if (amoledSwitchEl) {
+                amoledSwitchEl.classList.toggle('on', on);
+                amoledSwitchEl.setAttribute('aria-checked', on ? 'true' : 'false');
+            }
+            try { localStorage.setItem('youtubette_amoled', on ? '1' : '0'); } catch (e) {}
+        }
+        if (amoledSwitchEl) {
+            setAmoled(document.documentElement.classList.contains('amoled'));
+            amoledSwitchEl.addEventListener('click', () => {
+                setAmoled(!document.documentElement.classList.contains('amoled'));
+            });
+        }
         // 'youtube' = lista da ricerca (con paginazione YouTube),
         // 'spotify' = lista importata da una playlist Spotify (brani senza id YouTube
         // finché non vengono riprodotti la prima volta).
