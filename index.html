@@ -517,14 +517,29 @@
             --bg-card: #000000;
             --bg-input: #000000;
         }
-        html.amoled .qcard .circle {
+        html.amoled .qcard {
             border: 1.5px solid rgba(243,239,230,0.22);
+            border-radius: 24px;
+            padding: 10px 8px 12px;
+        }
+        html.amoled .qcard .circle {
+            border: none;
             box-shadow: none;
         }
-        html.amoled .qcard.latest .circle {
-            box-shadow: 0 0 0 2px var(--accent);
+        html.amoled .qcard.latest {
             border-color: transparent;
+            box-shadow: 0 0 0 2px var(--accent);
         }
+        /* Riga della canzone in riproduzione: prima era evidenziata solo dal colore
+           d'accento sul titolo (ora bianco come il resto, quindi non basta più a
+           distinguerla); in AMOLED la incornicio con lo stesso stile squircle. */
+        html.amoled .track-row.playing {
+            border: 1.5px solid rgba(243,239,230,0.28);
+            border-radius: 18px;
+            padding: 8px 10px;
+            margin: 4px 0;
+        }
+        html.amoled .track-row.playing::after { display: none; }
         html.amoled .menu-icon-btn,
         html.amoled .update-btn,
         html.amoled .results-header .back-btn,
@@ -2913,7 +2928,7 @@
                 const isPlaying = appState.currentIndex === index;
                 const trackRow = document.createElement('div');
                 trackRow.id = `track-row-${index}`;
-                trackRow.className = `track-row track-row-enter flex items-center gap-3.5 py-2.5 cursor-pointer transition-colors`;
+                trackRow.className = `track-row track-row-enter flex items-center gap-3.5 py-2.5 cursor-pointer transition-colors${isPlaying ? ' playing' : ''}`;
                 // Scaglionato dall'alto verso il basso: ogni riga appare poco dopo la precedente,
                 // così il caricamento (immagini, dati) resta mascherato dall'animazione stessa.
                 trackRow.style.animationDelay = `${Math.min(index - fromIndex, 20) * 45}ms`;
@@ -2998,6 +3013,7 @@
                 if (appState.currentIndex !== -1 && appState.currentIndex !== index) {
                     const oldRow = document.getElementById(`track-row-${appState.currentIndex}`);
                     if (oldRow) {
+                        oldRow.classList.remove('playing');
                         const oldText = oldRow.querySelector('p.text-sm');
                         if (oldText) { oldText.classList.remove('custom-text-accent', 'font-black'); oldText.classList.add('text-white'); }
                     }
@@ -3062,6 +3078,7 @@
             if (isBrowsingListPlaying) {
                 const newRow = document.getElementById(`track-row-${index}`);
                 if (newRow) {
+                    newRow.classList.add('playing');
                     const newText = newRow.querySelector('p.text-sm');
                     if (newText) { newText.classList.remove('text-white'); newText.classList.add('custom-text-accent', 'font-black'); }
                     // Lo scroll automatico alla riga va fatto SOLO se la vista playlist è
