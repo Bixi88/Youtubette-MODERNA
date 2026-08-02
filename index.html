@@ -12,7 +12,7 @@
         } catch (e) {}
     </script>
     <meta name="color-scheme" content="dark">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>YouTubette - Player</title>
 
     <!-- Stile critico: definito PRIMA di script/link esterni (Tailwind CDN, Font Awesome)
@@ -28,17 +28,17 @@
            ink-3      #221E27  — input/superfici ancora più elevate
            paper      #F3EFE6  — testo primario
            mute       #8B8794  — testo secondario
-           signal     #F3EFE6  — UNICO accento: bianco (stesso tono del testo "paper")
+           signal     #FF9A21  — UNICO accento: arancione
            bg-grad    #1D164A → #000000 — gradiente viola/nero dello sfondo
            ============================================================ */
         :root {
             color-scheme: dark;
-            --bg-main: #000000;
+            --bg-main: #171719;
             --bg-gradient-top: #1D164A;
             --bg-gradient: linear-gradient(180deg, var(--bg-main) 0%, var(--bg-gradient-top) 35%, var(--bg-gradient-top) 55%, var(--bg-main) 100%);
             --bg-card: rgba(24, 21, 28, 0.72);
             --bg-input: #221E27;
-            --accent: #F3EFE6;
+            --accent: #FF9A21;
             --text-main: #F3EFE6;
             --text-muted: #8B8794;
         }
@@ -50,18 +50,6 @@
             overflow: hidden;
             background: var(--bg-gradient);
             color: var(--text-main);
-        }
-
-        /* Con viewport-fit=cover la pagina si estende sotto le barre di sistema
-           (status bar in alto, gesture/nav bar in basso): così è lo sfondo
-           dell'app (--bg-gradient) a comparire lì invece del "buco" nero del
-           browser. Aggiungo le safe-area come extra al padding di base (p-4)
-           così i contenuti restano leggibili e non finiscono sotto le barre. */
-        body.custom-bg-main {
-            padding-top: calc(1rem + env(safe-area-inset-top, 0px)) !important;
-            padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px)) !important;
-            padding-left: calc(1rem + env(safe-area-inset-left, 0px)) !important;
-            padding-right: calc(1rem + env(safe-area-inset-right, 0px)) !important;
         }
 
         /* Fallback locale per .hidden: Tailwind è caricato da CDN esterno e la sua
@@ -78,8 +66,8 @@
     <link rel="apple-touch-icon" href="192x192.png">
     
     <!-- Meta Theme Color multipli per Firefox ed Android -->
-    <meta name="theme-color" content="#000000" id="metaThemeColor">
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
+    <meta name="theme-color" content="#171719" id="metaThemeColor">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171719">
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-menu-bar-style" content="black-translucent">
@@ -276,15 +264,6 @@
             opacity: 1;
         }
 
-        /* ================= Copertine in bianco e nero (tutte le artwork dell'app) ================= */
-        .qcard .circle,
-        .settings-playlist-thumb,
-        #miniPlayerImg,
-        #sheetArtworkImg,
-        .track-thumb-img {
-            filter: grayscale(1);
-        }
-
         .custom-bg-main { background: var(--bg-gradient); }
         .custom-bg-card { background: var(--bg-card); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
         .custom-bg-input { background-color: var(--bg-input); }
@@ -406,7 +385,7 @@
         #searchInput { flex:1; border:none !important; outline:none !important; background:transparent !important; font-family:'Inter',sans-serif; font-size:13.5px !important; font-weight:500; color:#1c1a20 !important; width:auto !important; opacity:1 !important; padding:0 !important; height:auto !important; }
         #searchInput::placeholder { color:#8b8794; }
         .search-pill .filter-btn { color:#4a4550; font-size:15px; flex:0 0 auto; display:flex; align-items:center; padding:2px; width:auto !important; opacity:1 !important; background:none !important; }
-        .search-pill .filter-btn.active { color:#1c1a20; }
+        .search-pill .filter-btn.active { color:#B8791F; }
 
         .filter-drop {
             background:var(--bg-card); border-radius:18px; border:1px solid var(--hair, rgba(243,239,230,0.08));
@@ -509,13 +488,22 @@
         /* ================= SKIN "AMOLED" (opzionale, attivabile dalle Impostazioni) =================
            Nero puro ovunque (niente più gradiente viola) e componenti chiave "svuotati":
            invece di sfondi colorati pieni, un bordo sottile bianco/grigio a fare da cornice,
-           ispirato alle icone outline di App Prompter. Tutto il resto dell'app (font, layout,
-           accento arancione) resta identico: cambiano solo le variabili colore + qualche bordo. */
+           ispirato alle icone outline di App Prompter. Niente accento arancione in questa skin:
+           l'accento diventa lo stesso bianco "paper" del testo. Le copertine, solo qui, sono in
+           bianco e nero. */
         html.amoled {
             --bg-main: #000000;
             --bg-gradient-top: #000000;
             --bg-card: #000000;
             --bg-input: #000000;
+            --accent: #F3EFE6;
+        }
+        html.amoled .qcard .circle,
+        html.amoled .settings-playlist-thumb,
+        html.amoled #miniPlayerImg,
+        html.amoled #sheetArtworkImg,
+        html.amoled .track-thumb-img {
+            filter: grayscale(1);
         }
         html.amoled .qcard {
             border: 1.5px solid rgba(243,239,230,0.22);
@@ -870,23 +858,6 @@
             filterDuration: 'any'
         };
         let deferredPrompt, nextSearchPageToken = '', isFetchingMore = false;
-
-        // ================= Toggle skin AMOLED =================
-        const amoledSwitchEl = document.getElementById('amoledSwitch');
-        function setAmoled(on) {
-            document.documentElement.classList.toggle('amoled', on);
-            if (amoledSwitchEl) {
-                amoledSwitchEl.classList.toggle('on', on);
-                amoledSwitchEl.setAttribute('aria-checked', on ? 'true' : 'false');
-            }
-            try { localStorage.setItem('youtubette_amoled', on ? '1' : '0'); } catch (e) {}
-        }
-        if (amoledSwitchEl) {
-            setAmoled(document.documentElement.classList.contains('amoled'));
-            amoledSwitchEl.addEventListener('click', () => {
-                setAmoled(!document.documentElement.classList.contains('amoled'));
-            });
-        }
         // 'youtube' = lista da ricerca (con paginazione YouTube),
         // 'spotify' = lista importata da una playlist Spotify (brani senza id YouTube
         // finché non vengono riprodotti la prima volta).
@@ -1409,6 +1380,23 @@
                 closeApiModal();
             });
             document.getElementById('modalSaveBtn').addEventListener('click', saveSettingsFromModal);
+
+            // ================= Toggle skin AMOLED =================
+            const amoledSwitchEl = document.getElementById('amoledSwitch');
+            function setAmoled(on) {
+                document.documentElement.classList.toggle('amoled', on);
+                if (amoledSwitchEl) {
+                    amoledSwitchEl.classList.toggle('on', on);
+                    amoledSwitchEl.setAttribute('aria-checked', on ? 'true' : 'false');
+                }
+                try { localStorage.setItem('youtubette_amoled', on ? '1' : '0'); } catch (e) {}
+            }
+            if (amoledSwitchEl) {
+                setAmoled(document.documentElement.classList.contains('amoled'));
+                amoledSwitchEl.addEventListener('click', () => {
+                    setAmoled(!document.documentElement.classList.contains('amoled'));
+                });
+            }
 
             // Click fuori dal popup (sul backdrop) chiude il menu impostazioni
             document.getElementById('apiModal').addEventListener('click', (e) => {
@@ -3014,9 +3002,9 @@
                 if (appState.currentIndex !== -1 && appState.currentIndex !== index) {
                     const oldRow = document.getElementById(`track-row-${appState.currentIndex}`);
                     if (oldRow) {
-                        oldRow.classList.remove('playing');
                         const oldText = oldRow.querySelector('p.text-sm');
                         if (oldText) { oldText.classList.remove('custom-text-accent', 'font-black'); oldText.classList.add('text-white'); }
+                        oldRow.classList.remove('playing');
                     }
                 }
                 appState.currentIndex = index;
@@ -3079,9 +3067,9 @@
             if (isBrowsingListPlaying) {
                 const newRow = document.getElementById(`track-row-${index}`);
                 if (newRow) {
-                    newRow.classList.add('playing');
                     const newText = newRow.querySelector('p.text-sm');
                     if (newText) { newText.classList.remove('text-white'); newText.classList.add('custom-text-accent', 'font-black'); }
+                    newRow.classList.add('playing');
                     // Lo scroll automatico alla riga va fatto SOLO se la vista playlist è
                     // davvero visibile in quel momento: se il brano viene cambiato dalla
                     // home (es. swipe sul mini player), la vista risultati è nascosta fuori
