@@ -642,7 +642,12 @@
         html.walkman #miniPlayPauseBtn i {
             color: var(--text-main) !important;
         }
-        html.walkman #prevBtn, html.walkman #nextBtn { color: var(--text-main); }
+        html.walkman #prevBtn, html.walkman #nextBtn {
+            width: 50px; height: 50px; padding: 0; border-radius: 50%;
+            border: 2px solid var(--text-main); color: var(--text-main) !important;
+            display: flex; align-items: center; justify-content: center; font-size: 16px;
+            background: transparent;
+        }
         html.walkman #pwaInstallBtn {
             background: transparent !important;
             border: 1px solid var(--text-main);
@@ -653,13 +658,19 @@
         /* ================= Selettore Tema (Moderna / Amoled / Walkman) ================= */
         .theme-select-row .lbl { font-size:13px; font-weight:600; color:var(--text-main); }
         .theme-select-row .sub { font-size:11px; color:var(--text-muted); margin-top:2px; margin-bottom:10px; }
-        .theme-select { display:flex; gap:6px; background:var(--bg-input); padding:4px; border-radius:14px; }
-        .theme-opt {
-            flex:1; text-align:center; font-size:11.5px; font-weight:700; padding:9px 4px; border-radius:10px;
-            color:var(--text-muted); cursor:pointer; user-select:none;
-            transition: background .2s ease, color .2s ease;
+        .theme-select { position:relative; display:flex; gap:6px; background:var(--bg-input); padding:4px; border-radius:14px; }
+        .theme-select-thumb {
+            position:absolute; top:4px; bottom:4px; left:0; width:0; border-radius:10px; background:var(--accent);
+            transition: transform .32s cubic-bezier(0.34,1.56,0.64,1), width .32s cubic-bezier(0.34,1.56,0.64,1);
+            z-index:0; pointer-events:none;
         }
-        .theme-opt.active { background:var(--accent); color:#14120e; }
+        .theme-select-thumb.no-anim { transition:none; }
+        .theme-opt {
+            position:relative; z-index:1; flex:1; text-align:center; font-size:11.5px; font-weight:700; padding:9px 4px;
+            border-radius:10px; color:var(--text-muted); cursor:pointer; user-select:none;
+            transition: color .22s ease;
+        }
+        .theme-opt.active { color:#14120e; }
     </style>
 </head>
 <body class="flex flex-col justify-between hidden p-4 box-border h-full custom-bg-main relative">
@@ -870,11 +881,11 @@
                 </div>
 
                 <div class="flex items-center justify-center gap-8 mb-8">
-                    <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step"></i></button>
+                    <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step" id="prevIcon"></i></button>
                     <button id="playPauseBtn" class="w-[68px] h-[68px] rounded-full flex items-center justify-center text-[24px] shadow-2xl custom-bg-accent" style="color:#1a1305;">
                         <i class="fa-solid fa-play ml-1" id="playIcon"></i>
                     </button>
-                    <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-forward-step"></i></button>
+                    <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-forward-step" id="nextIcon"></i></button>
                 </div>
 
                 <div class="hidden md:flex items-center space-x-3 justify-center custom-text-muted px-4 py-2 bg-white/5 rounded-2xl mb-2">
@@ -914,6 +925,7 @@
                     <div class="lbl">Tema</div>
                     <div class="sub">Scegli l'aspetto dell'app</div>
                     <div class="theme-select" id="themeSelect" role="tablist">
+                        <div class="theme-select-thumb" id="themeSelectThumb"></div>
                         <div class="theme-opt" data-theme="moderna" role="tab">Moderna</div>
                         <div class="theme-opt" data-theme="amoled" role="tab">Amoled</div>
                         <div class="theme-opt" data-theme="walkman" role="tab">Walkman</div>
@@ -1474,12 +1486,45 @@
 
             // ================= Selettore Tema (Moderna / Amoled / Walkman) =================
             const themeSelectEl = document.getElementById('themeSelect');
+            const themeThumbEl = document.getElementById('themeSelectThumb');
             const themeOptEls = themeSelectEl ? Array.from(themeSelectEl.querySelectorAll('.theme-opt')) : [];
+            const prevIconEl = document.getElementById('prevIcon');
+            const nextIconEl = document.getElementById('nextIcon');
+            let themeInitDone = false;
+            function positionThemeThumb(el, animate) {
+                if (!themeThumbEl || !el) return;
+                if (!animate) themeThumbEl.classList.add('no-anim');
+                themeThumbEl.style.width = el.offsetWidth + 'px';
+                themeThumbEl.style.transform = 'translateX(' + el.offsetLeft + 'px)';
+                if (!animate) {
+                    // forza il reflow prima di riattivare la transizione, altrimenti il primo
+                    // posizionamento verrebbe comunque animato dalla posizione 0 di partenza
+                    void themeThumbEl.offsetWidth;
+                    themeThumbEl.classList.remove('no-anim');
+                }
+            }
+            // Scambio icone avanti/indietro: nel tema Walkman uso le doppie frecce "pulite"
+            // (senza barra laterale) al posto delle classiche fa-backward-step/fa-forward-step,
+            // più coerenti con i tasti fisici del lettore che stiamo imitando.
+            function applyWalkmanIcons(on) {
+                if (prevIconEl) {
+                    prevIconEl.classList.toggle('fa-backward-step', !on);
+                    prevIconEl.classList.toggle('fa-backward', on);
+                }
+                if (nextIconEl) {
+                    nextIconEl.classList.toggle('fa-forward-step', !on);
+                    nextIconEl.classList.toggle('fa-forward', on);
+                }
+            }
             function setTheme(theme) {
                 if (theme !== 'amoled' && theme !== 'walkman') theme = 'moderna';
                 document.documentElement.classList.remove('amoled', 'walkman');
                 if (theme !== 'moderna') document.documentElement.classList.add(theme);
-                themeOptEls.forEach(opt => opt.classList.toggle('active', opt.dataset.theme === theme));
+                applyWalkmanIcons(theme === 'walkman');
+                const activeOpt = themeOptEls.find(opt => opt.dataset.theme === theme);
+                themeOptEls.forEach(opt => opt.classList.toggle('active', opt === activeOpt));
+                positionThemeThumb(activeOpt, themeInitDone);
+                themeInitDone = true;
                 try {
                     localStorage.setItem('youtubette_theme', theme);
                     // Retrocompatibilità con la vecchia chiave booleana, nel caso si torni a una build precedente
@@ -1493,6 +1538,10 @@
                 setTheme(currentTheme);
                 themeOptEls.forEach(opt => {
                     opt.addEventListener('click', () => setTheme(opt.dataset.theme));
+                });
+                window.addEventListener('resize', () => {
+                    const activeOpt = themeOptEls.find(opt => opt.classList.contains('active'));
+                    if (activeOpt) positionThemeThumb(activeOpt, false);
                 });
             }
 
