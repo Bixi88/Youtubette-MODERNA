@@ -683,56 +683,43 @@
             background-color: var(--walkman-highlight) !important;
         }
 
-        /* ---- Icone play/pause/avanti/indietro "vere", identiche a quelle del lettore fisico:
-           nascondo il glifo Font Awesome (resta invariato per le altre skin) e disegno la forma
-           con un mask-image (path Material Symbols), così il triangolo del play non è equilatero
-           come quello di FA ma più stretto e alto, esattamente come nelle foto di riferimento. */
-        html.walkman #playIcon,
-        html.walkman #miniPlayIcon,
-        html.walkman #prevIcon,
-        html.walkman #nextIcon {
+        /* ---- Icona play/pause "vera" (triangolo non equilatero come nella foto):
+           Font Awesome non ha una variante play più stretta/alta, quindi qui nascondo il suo
+           glifo e disegno la forma con un mask-image (stesso path di Material Symbols "play_arrow",
+           vertici 8,5 - 8,19 - 19,12: più alto che largo, non equilatero). Avanti/indietro invece
+           usano già le icone FA vere fa-backward-fast/fa-forward-fast (bar + doppia freccia,
+           impostate in applyWalkmanIcons in JS), identiche alla foto senza bisogno di trucchi.
+           NOTA sulla specificità: la regola qui sotto deve avere più "peso" della preesistente
+           "html.walkman #playPauseBtn i { color:var(--text-main) !important }" più in alto in
+           questo stesso file, altrimenti quella vince e il glifo FA originale resta visibile
+           sotto/insieme al mio triangolo custom. Per questo uso selettori con doppio ID. */
+        html.walkman #playPauseBtn #playIcon,
+        html.walkman #miniPlayPauseBtn #miniPlayIcon {
             color: transparent !important;
             position: relative;
         }
-        html.walkman #playIcon::after,
-        html.walkman #miniPlayIcon::after,
-        html.walkman #prevIcon::after,
-        html.walkman #nextIcon::after {
+        html.walkman #playPauseBtn #playIcon::after,
+        html.walkman #miniPlayPauseBtn #miniPlayIcon::after {
             content: '';
             position: absolute;
             top: 50%; left: 50%;
             width: 1em; height: 1em;
             transform: translate(-50%, -50%);
+            color: var(--text-main);
             background-color: currentColor;
             -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
             -webkit-mask-position: center; mask-position: center;
             -webkit-mask-size: contain; mask-size: contain;
         }
-        html.walkman #playPauseBtn #playIcon::after,
-        html.walkman #miniPlayPauseBtn #miniPlayIcon::after {
-            color: var(--text-main);
-        }
-        html.walkman #prevBtn #prevIcon::after,
-        html.walkman #nextBtn #nextIcon::after {
-            color: var(--text-main);
-        }
-        html.walkman #playIcon.fa-play::after,
-        html.walkman #miniPlayIcon.fa-play::after {
+        html.walkman #playPauseBtn #playIcon.fa-play::after,
+        html.walkman #miniPlayPauseBtn #miniPlayIcon.fa-play::after {
             -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E");
             mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E");
         }
-        html.walkman #playIcon.fa-pause::after,
-        html.walkman #miniPlayIcon.fa-pause::after {
+        html.walkman #playPauseBtn #playIcon.fa-pause::after,
+        html.walkman #miniPlayPauseBtn #miniPlayIcon.fa-pause::after {
             -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 5h4v14H6zm8 0h4v14h-4z'/%3E%3C/svg%3E");
             mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 5h4v14H6zm8 0h4v14h-4z'/%3E%3C/svg%3E");
-        }
-        html.walkman #prevIcon::after {
-            -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6h2v12H6zm3.5 6l8.5 6V6z'/%3E%3C/svg%3E");
-            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6h2v12H6zm3.5 6l8.5 6V6z'/%3E%3C/svg%3E");
-        }
-        html.walkman #nextIcon::after {
-            -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M16 6h2v12h-2zM6 18l8.5-6L6 6z'/%3E%3C/svg%3E");
-            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M16 6h2v12h-2zM6 18l8.5-6L6 6z'/%3E%3C/svg%3E");
         }
 
         /* ================= Selettore Tema (Moderna / Amoled / Walkman) ================= */
@@ -1583,17 +1570,17 @@
                     themeThumbEl.classList.remove('no-anim');
                 }
             }
-            // Scambio icone avanti/indietro: nel tema Walkman uso le doppie frecce "pulite"
-            // (senza barra laterale) al posto delle classiche fa-backward-step/fa-forward-step,
-            // più coerenti con i tasti fisici del lettore che stiamo imitando.
+            // Scambio icone avanti/indietro: nel tema Walkman uso le doppie frecce CON barra
+            // (fa-backward-fast / fa-forward-fast) al posto delle classiche fa-backward-step/
+            // fa-forward-step, identiche a quelle dei tasti fisici del lettore che stiamo imitando.
             function applyWalkmanIcons(on) {
                 if (prevIconEl) {
                     prevIconEl.classList.toggle('fa-backward-step', !on);
-                    prevIconEl.classList.toggle('fa-backward', on);
+                    prevIconEl.classList.toggle('fa-backward-fast', on);
                 }
                 if (nextIconEl) {
                     nextIconEl.classList.toggle('fa-forward-step', !on);
-                    nextIconEl.classList.toggle('fa-forward', on);
+                    nextIconEl.classList.toggle('fa-forward-fast', on);
                 }
             }
             function setTheme(theme) {
