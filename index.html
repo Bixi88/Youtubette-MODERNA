@@ -82,6 +82,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font usato solo dallo skin "Walkman" (vedi regole html.walkman più sotto): Roboto al posto
+         di Inter, per un look più vicino ai player hi-fi/Android nativi che questo skin imita. -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
 
     <!-- Preconnect verso i domini YouTube: apre in anticipo la connessione (DNS+TLS)
          così, quando parte davvero il primo player.loadVideoById(), non si paga più
@@ -654,6 +657,83 @@
             color: var(--text-main) !important;
         }
         html.walkman #sheetArtworkGlow { display: none; }
+
+        /* ---- Font dedicato: now playing sheet, lista canzoni/ricerche, miniplayer ---- */
+        html.walkman #nowPlayingSheet,
+        html.walkman #trackList,
+        html.walkman #searchContainer,
+        html.walkman #resultsHeader,
+        html.walkman #miniPlayer {
+            font-family: 'Roboto', sans-serif;
+        }
+        html.walkman #searchInput {
+            font-family: 'Roboto', sans-serif !important;
+        }
+
+        /* ---- Highlight viola nella lista (titolo + badge della traccia in riproduzione) ----
+           Variabile dedicata: non tocco --accent (resta l'argento del resto dello skin), così
+           il viola compare solo qui e sulla barra del minutaggio, come richiesto. */
+        html.walkman { --walkman-highlight: #B392F5; }
+        html.walkman .track-row.playing .custom-text-accent { color: var(--walkman-highlight) !important; }
+        html.walkman .track-playing-badge { color: var(--walkman-highlight) !important; }
+
+        /* ---- Barra del minutaggio (miniplayer + now playing sheet), stesso viola ---- */
+        html.walkman #progressBar,
+        html.walkman #miniProgressBar {
+            background-color: var(--walkman-highlight) !important;
+        }
+
+        /* ---- Icone play/pause/avanti/indietro "vere", identiche a quelle del lettore fisico:
+           nascondo il glifo Font Awesome (resta invariato per le altre skin) e disegno la forma
+           con un mask-image (path Material Symbols), così il triangolo del play non è equilatero
+           come quello di FA ma più stretto e alto, esattamente come nelle foto di riferimento. */
+        html.walkman #playIcon,
+        html.walkman #miniPlayIcon,
+        html.walkman #prevIcon,
+        html.walkman #nextIcon {
+            color: transparent !important;
+            position: relative;
+        }
+        html.walkman #playIcon::after,
+        html.walkman #miniPlayIcon::after,
+        html.walkman #prevIcon::after,
+        html.walkman #nextIcon::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 1em; height: 1em;
+            transform: translate(-50%, -50%);
+            background-color: currentColor;
+            -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+            -webkit-mask-position: center; mask-position: center;
+            -webkit-mask-size: contain; mask-size: contain;
+        }
+        html.walkman #playPauseBtn #playIcon::after,
+        html.walkman #miniPlayPauseBtn #miniPlayIcon::after {
+            color: var(--text-main);
+        }
+        html.walkman #prevBtn #prevIcon::after,
+        html.walkman #nextBtn #nextIcon::after {
+            color: var(--text-main);
+        }
+        html.walkman #playIcon.fa-play::after,
+        html.walkman #miniPlayIcon.fa-play::after {
+            -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M8 5v14l11-7z'/%3E%3C/svg%3E");
+        }
+        html.walkman #playIcon.fa-pause::after,
+        html.walkman #miniPlayIcon.fa-pause::after {
+            -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 5h4v14H6zm8 0h4v14h-4z'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 5h4v14H6zm8 0h4v14h-4z'/%3E%3C/svg%3E");
+        }
+        html.walkman #prevIcon::after {
+            -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6h2v12H6zm3.5 6l8.5 6V6z'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 6h2v12H6zm3.5 6l8.5 6V6z'/%3E%3C/svg%3E");
+        }
+        html.walkman #nextIcon::after {
+            -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M16 6h2v12h-2zM6 18l8.5-6L6 6z'/%3E%3C/svg%3E");
+            mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M16 6h2v12h-2zM6 18l8.5-6L6 6z'/%3E%3C/svg%3E");
+        }
 
         /* ================= Selettore Tema (Moderna / Amoled / Walkman) ================= */
         .theme-select-row .lbl { font-size:13px; font-weight:600; color:var(--text-main); }
