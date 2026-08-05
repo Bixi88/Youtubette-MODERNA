@@ -72,7 +72,19 @@
     
     <!-- Meta Theme Color multipli per Firefox ed Android -->
     <meta name="theme-color" content="#0D0E12" id="metaThemeColor">
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0D0E12">
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0D0E12" id="metaThemeColorDark">
+    <script>
+        // Stesso principio dello sfondo/tema "critico" qui sopra: se all'apertura è già salvato
+        // amoled/walkman (sfondo nero puro, non il viola/blu di "Moderna"), allinea SUBITO anche
+        // il colore della barra di stato di sistema, altrimenti resterebbe quello di "Moderna"
+        // finché il resto dello script più in basso non lo corregge (piccolo "flash" di colore).
+        try {
+            if (savedTheme === 'amoled' || savedTheme === 'walkman') {
+                document.getElementById('metaThemeColor')?.setAttribute('content', '#000000');
+                document.getElementById('metaThemeColorDark')?.setAttribute('content', '#000000');
+            }
+        } catch (e) {}
+    </script>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-menu-bar-style" content="black-translucent">
@@ -564,22 +576,6 @@
         html.amoled #modalApiKeyInput2 {
             border: 1.5px solid rgba(243,239,230,0.18) !important;
         }
-        /* ================= Toggle skin AMOLED (pillola on/off nelle Impostazioni) ================= */
-        .amoled-toggle-row { display:flex; align-items:center; justify-content:space-between; padding:4px 2px; }
-        .amoled-toggle-row .lbl { font-size:13px; font-weight:600; color:var(--text-main); }
-        .amoled-toggle-row .sub { font-size:11px; color:var(--text-muted); margin-top:2px; }
-        .amoled-switch {
-            position:relative; width:44px; height:26px; border-radius:999px; flex:0 0 auto;
-            background: var(--bg-input); border:1.5px solid rgba(243,239,230,0.2);
-            cursor:pointer; transition: background .2s ease, border-color .2s ease;
-        }
-        .amoled-switch::after {
-            content:''; position:absolute; top:2px; left:2px; width:19px; height:19px; border-radius:50%;
-            background: var(--text-muted); transition: transform .2s cubic-bezier(0.34,1.56,0.64,1), background .2s ease;
-        }
-        .amoled-switch.on { background: var(--accent); border-color: var(--accent); }
-        .amoled-switch.on::after { transform: translateX(18px); background:#1a1305; }
-
         /* ================= SKIN "WALKMAN" (opzionale, attivabile dalle Impostazioni) =================
            Ispirata ai lettori musicali hi-fi portatili: nero pieno, un argento freddo al posto
            del "paper" caldo delle altre skin, copertine squadrate con un bordo sottile invece
@@ -714,6 +710,7 @@
             <div class="home-header-row">
                 <button id="apiConfigBtn" class="menu-icon-btn" title="Impostazioni">
                     <span class="menu-bars"><span></span><span></span></span>
+                    <span id="apiErrorBadge" class="error-badge hidden" title="Problema con le chiavi API"></span>
                 </button>
                 <h1 class="app-title display">YouTubette</h1>
                 <button id="appUpdateBtn" class="hidden update-btn" title="Aggiorna App">
@@ -1549,11 +1546,21 @@
                     nextIconEl.classList.toggle('fa-forward-fast', on);
                 }
             }
+            // Tiene allineato il colore della barra di stato di sistema (status bar Android/iOS,
+            // scheda del task switcher) con lo sfondo reale dell'app: Amoled e Walkman portano
+            // --bg-main a nero puro, quindi anche qui deve diventare nero, non restare sul
+            // viola/blu di "Moderna" come accadeva prima (nessun aggiornamento a runtime).
+            function updateMetaThemeColor(theme) {
+                const color = (theme === 'amoled' || theme === 'walkman') ? '#000000' : '#0D0E12';
+                document.getElementById('metaThemeColor')?.setAttribute('content', color);
+                document.getElementById('metaThemeColorDark')?.setAttribute('content', color);
+            }
             function setTheme(theme) {
                 if (theme !== 'amoled' && theme !== 'walkman') theme = 'moderna';
                 document.documentElement.classList.remove('amoled', 'walkman');
                 if (theme !== 'moderna') document.documentElement.classList.add(theme);
                 applyWalkmanIcons(theme === 'walkman');
+                updateMetaThemeColor(theme);
                 const activeOpt = themeOptEls.find(opt => opt.dataset.theme === theme);
                 themeOptEls.forEach(opt => opt.classList.toggle('active', opt === activeOpt));
                 positionThemeThumb(activeOpt, themeInitDone);
@@ -2561,7 +2568,7 @@
             
             marqueeContent.classList.remove('animate-marquee');
             const wrapper = swipeTitle.querySelector('.marquee-wrapper');
-            let cleanText = `<span id="playerTrackTitle" class="text-[26px] font-bold text-white">${escapeHtml(titleText)}</span>`;
+            let cleanText = `<span id="playerTrackTitle" class="text-[26px] font-bold text-[var(--text-main)]">${escapeHtml(titleText)}</span>`;
             
             marqueeContent.innerHTML = cleanText;
             if (wrapper && marqueeContent.scrollWidth > wrapper.clientWidth) {
@@ -2988,7 +2995,14 @@
 
             try {
                 const data = await youtubeSearch({ q: query, maxResults: 1 });
-                if (!data) throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
+                // Solo QUESTO è un vero problema di chiavi/API (nessuna delle 3 fonti ha risposto):
+                // mostra il badge di errore. Se invece l'API ha risposto ma semplicemente non c'è
+                // un video corrispondente a questo brano, non è un problema di chiave: niente badge,
+                // si passa direttamente al messaggio "brano non trovato" più sotto.
+                if (!data) {
+                    showVisualApiError();
+                    throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
+                }
                 if (!data.items || data.items.length === 0) throw new Error('Nessun video YouTube trovato per questo brano.');
 
                 const item = data.items[0];
@@ -3032,7 +3046,6 @@
                 return true;
             } catch (err) {
                 console.warn('Risoluzione YouTube fallita per', track.title, err);
-                showVisualApiError();
                 showToast(`Impossibile trovare "${track.title}" su YouTube.`);
                 return false;
             }
