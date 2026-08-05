@@ -463,48 +463,6 @@
         .track-row:last-child::after { display:none; }
         .track-playing-badge { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(0,0,0,.35); color:var(--accent); }
 
-        /* ================= Mini loader "nota musicale" (import playlist Spotify) =================
-           Sostituisce il vecchio vinile: stessa idea (indicatore di attesa durante l'import),
-           ma un'unica nota a due teste in stile line-icon, coerente con i token dell'app
-           (contorno in --text-main, accento in --accent) e con la stessa curva di
-           easing "morbida" già usata per le transizioni dell'app (cubic-bezier(0.22,1,0.36,1)),
-           per un movimento fluido senza scatti, leggero da renderizzare (solo transform/opacity). */
-        .note-loader-wrap { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:16px 0; }
-        .note-loader-wrap p { margin:0; }
-        .note-stage { position:relative; width:60px; height:60px; display:flex; align-items:center; justify-content:center; }
-        .note-stage svg {
-            width:44px; height:52px; overflow:visible;
-            filter: drop-shadow(0 6px 14px rgba(0,0,0,.45));
-        }
-        .note-sway {
-            transform-origin: 50% 88%;
-            animation: noteSway 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-        }
-        .note-head {
-            transform-box: fill-box;
-            transform-origin: center;
-            animation: noteHeadPulse 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-        }
-        .note-head-right { animation-delay: .16s; }
-        .note-beam {
-            transform-box: fill-box;
-            transform-origin: center;
-            animation: noteBeamGlow 1.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
-        }
-        @keyframes noteSway {
-            0%   { transform: translateY(0) rotate(0deg); }
-            30%  { transform: translateY(-4px) rotate(-3deg); }
-            60%  { transform: translateY(-1px) rotate(2deg); }
-            100% { transform: translateY(0) rotate(0deg); }
-        }
-        @keyframes noteHeadPulse {
-            0%, 100% { transform: scale(1); }
-            50%      { transform: scale(1.14); }
-        }
-        @keyframes noteBeamGlow {
-            0%, 100% { opacity:1; filter: drop-shadow(0 0 0 rgba(255,154,33,0)); }
-            50%      { opacity:.82; filter: drop-shadow(0 0 5px rgba(255,154,33,.65)); }
-        }
         /* ================= SKIN "AMOLED" (opzionale, attivabile dalle Impostazioni) =================
            Nero puro ovunque (niente più gradiente viola) e componenti chiave "svuotati":
            invece di sfondi colorati pieni, un bordo sottile bianco/grigio a fare da cornice,
@@ -1007,6 +965,15 @@
         // 'spotify' = lista importata da una playlist Spotify (brani senza id YouTube
         // finché non vengono riprodotti la prima volta).
         let currentListSource = 'youtube';
+        // Tiene traccia dell'ultima ricerca YouTube o playlist Spotify effettivamente
+        // caricata (query o url) e del titolo mostrato nella results view: se l'utente
+        // torna alla home e riclicca sulla STESSA voce recente senza aver caricato
+        // nel frattempo nient'altro, riusiamo appState.tracks già in memoria invece di
+        // rifare la fetch (che consumerebbe di nuovo quota YouTube / rete Spotify).
+        // Basta una nuova ricerca, un nuovo import o il click su un'altra voce recente
+        // per invalidarla, sostituendola con la nuova.
+        let currentLoadedKey = null;
+        let currentLoadedTitle = '';
         let isScrubbing = false; 
         let scrubPercentage = 0;
         
@@ -2417,8 +2384,18 @@
         function openRecentItem(item) {
             if (!item) return;
             if (item.type === 'playlist' && item.url) {
+                const key = 'playlist:' + item.url;
+                if (currentLoadedKey === key && appState.tracks.length > 0) {
+                    // È già la playlist attualmente in memoria (nessun'altra ricerca/import
+                    // fatta nel frattempo): la mostriamo di nuovo senza rifare la fetch.
+                    currentListSource = 'spotify';
+                    showResultsView(currentLoadedTitle);
+                    renderTracklist(0);
+                    return;
+                }
                 importSpotifyPlaylist(item.url);
             } else if (item.type === 'song' && item.track) {
+                currentLoadedKey = 'song:' + item.track.id;
                 currentListSource = 'youtube';
                 appState.tracks = [item.track];
                 nextSearchPageToken = '';
@@ -2426,6 +2403,16 @@
                 loadTrack(0);
                 openNowPlayingSheetWhenArtworkReady();
             } else if (item.query) {
+                const key = 'query:' + item.query;
+                if (currentLoadedKey === key && appState.tracks.length > 0) {
+                    // Stessa ricerca già in memoria: la mostriamo di nuovo senza richiamare
+                    // l'API YouTube (evita di consumare quota inutilmente).
+                    currentListSource = 'youtube';
+                    searchInput.value = item.query;
+                    showResultsView(item.query);
+                    renderTracklist(0);
+                    return;
+                }
                 // Voci "Recenti" più vecchie, salvate prima che venisse memorizzato anche il
                 // brano: in mancanza del brano completo, ripieghiamo sulla ricerca come prima.
                 searchInput.value = item.query;
@@ -2722,6 +2709,10 @@
 
                 appState.tracks = appState.tracks.concat(newTracks);
                 renderTracklist(isLoadMore ? previousCount : 0);
+                if (!isLoadMore) {
+                    currentLoadedKey = 'query:' + query;
+                    currentLoadedTitle = query;
+                }
             } catch (error) {
                 showVisualApiError();
                 if (resultsStatusText && !isLoadMore) {
@@ -2869,31 +2860,6 @@
             return null;
         }
 
-        // Piccolo loader "nota musicale" mostrato durante l'importazione di una playlist
-        // Spotify (fase con rete/parsing più lenta): un'unica nota (SVG inline, niente immagini)
-        // che oscilla dolcemente, con le due teste che pulsano leggermente sfasate e il beam
-        // (l'accento arancio) che si illumina in loop: stessi colori e stessa curva di
-        // movimento dell'app, per restare coerente con il resto dell'interfaccia.
-        function noteLoaderHtml(label) {
-            return `
-                <div class="note-loader-wrap">
-                    <div class="note-stage">
-                        <svg class="note-sway" viewBox="0 0 60 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <ellipse class="note-head" cx="14" cy="58" rx="11.5" ry="9" transform="rotate(-14 14 58)"
-                                stroke="var(--text-main)" stroke-width="3.4"/>
-                            <ellipse class="note-head note-head-right" cx="43" cy="58" rx="11.5" ry="9" transform="rotate(-14 43 58)"
-                                stroke="var(--text-main)" stroke-width="3.4"/>
-                            <path d="M23 55 V17" stroke="var(--text-main)" stroke-width="3.4" stroke-linecap="round"/>
-                            <path d="M52 55 V9" stroke="var(--text-main)" stroke-width="3.4" stroke-linecap="round"/>
-                            <path class="note-beam" d="M22 22 L53 10 V18 L22 30 Z" fill="var(--accent)"/>
-                            <path d="M22 33 L53 21" stroke="var(--text-main)" stroke-width="2.2" stroke-linecap="round"/>
-                        </svg>
-                    </div>
-                    <p class="text-xs italic custom-text-muted">${escapeHtml(label)}</p>
-                </div>
-            `;
-        }
-
         async function importSpotifyPlaylist(url) {
             const resultsStatusText = document.getElementById('resultsStatusText');
             const playlistId = extractSpotifyPlaylistId(url);
@@ -2915,10 +2881,7 @@
             appState.tracks = []; appState.currentIndex = -1;
             toggleDownloadButtons(false);
             document.getElementById('trackList').innerHTML = '';
-            if (resultsStatusText) {
-                resultsStatusText.classList.remove('hidden');
-                resultsStatusText.innerHTML = noteLoaderHtml('Importazione playlist Spotify in corso...');
-            }
+            if (resultsStatusText) resultsStatusText.classList.add('hidden');
 
             try {
                 const fetched = await fetchSpotifyEmbedText(playlistId);
@@ -2954,6 +2917,8 @@
 
                 const meta = extractSpotifyPlaylistMeta(fetched);
                 showResultsView(meta.name);
+                currentLoadedKey = 'playlist:' + url;
+                currentLoadedTitle = meta.name;
                 const playlistArtwork = meta.cover || await pickRandomPlaylistArtwork(rawTracks);
                 addRecentItem({ name: meta.name, type: 'playlist', url, artwork: playlistArtwork });
                 addRecentPlaylist({ name: meta.name, url, artwork: playlistArtwork });
