@@ -600,8 +600,11 @@
             border: 1px solid rgba(240,240,242,0.18);
         }
         html.walkman .qcard .circle { box-shadow: none; }
-        html.walkman .qcard.latest .circle { box-shadow: 0 0 0 2px var(--accent); border-color: transparent; }
-        html.walkman .qcard.latest .name { color: var(--accent); }
+        /* Cornice ed evidenziazione della card "più recente": stesso viola usato per la
+           barra del minutaggio (--walkman-highlight), non più il bianco/argento di --accent,
+           per restare coerente con l'unico accento colorato di questa skin. */
+        html.walkman .qcard.latest .circle { box-shadow: 0 0 0 2px var(--walkman-highlight); border-color: transparent; }
+        html.walkman .qcard.latest .name { color: var(--walkman-highlight); }
         html.walkman .track-row::after { background: rgba(240,240,242,0.10); }
         html.walkman .menu-icon-btn,
         html.walkman .update-btn,
@@ -678,6 +681,15 @@
         html.walkman #miniProgressBar {
             background-color: var(--walkman-highlight) !important;
         }
+
+        /* ---- Selettore Tema: il tile/thumb che segue la scheda attiva usa lo stesso
+           viola invece del bianco/argento di --accent, quando la skin attiva è Walkman
+           (si applica indipendentemente da quale scheda è selezionata in quel momento,
+           dato che l'unica accesa è comunque quella di html.walkman). Testo del tab
+           attivo lasciato scuro (#14120e, invariato): su questo viola chiaro il nero
+           mantiene un contrasto solido (~8:1), il bianco scenderebbe sotto la soglia
+           leggibile (~2.5:1). */
+        html.walkman .theme-select-thumb { background: var(--walkman-highlight); }
 
         /* ---- Icona play/pause: usa il vero glifo Font Awesome (fa-play/fa-pause), esattamente
            come avanti/indietro (fa-backward-fast/fa-forward-fast), invece del triangolo disegnato
