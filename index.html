@@ -402,7 +402,11 @@
 
         .search-pill { margin-top:12px; background:var(--text-main); border-radius:999px; display:flex; align-items:center; gap:10px; padding:10px 14px; position:relative; }
         .search-pill .mag-btn { color:#4a4550; font-size:15px; flex:0 0 auto; background:none; border:none; padding:2px; display:flex; -webkit-text-stroke: 0.5px currentColor; text-stroke: 0.5px currentColor; }
-        #searchInput { flex:1; border:none !important; outline:none !important; background:transparent !important; font-family:'Inter',sans-serif; font-size:13.5px !important; font-weight:500; color:#1c1a20 !important; width:auto !important; opacity:1 !important; padding:0 !important; height:auto !important; }
+        #searchInput { flex:1; border:none !important; outline:none !important; background:transparent !important; font-family:'Inter',sans-serif; font-size:13.5px !important; font-weight:500; color:#1c1a20 !important; width:auto !important; opacity:1 !important; padding:0 !important; height:auto !important; -webkit-appearance:none; appearance:none; }
+        #searchInput::-webkit-search-decoration,
+        #searchInput::-webkit-search-cancel-button,
+        #searchInput::-webkit-search-results-button,
+        #searchInput::-webkit-search-results-decoration { display:none; -webkit-appearance:none; }
         #searchInput::placeholder { color:#8b8794; }
         .search-pill .filter-btn { color:#4a4550; font-size:15px; flex:0 0 auto; display:flex; align-items:center; padding:2px; width:auto !important; opacity:1 !important; background:none !important; }
         .search-pill .filter-btn.active { color:#B8791F; }
@@ -706,7 +710,7 @@
                 <button id="searchTriggerBtn" class="mag-btn" title="Cerca">
                     <i class="fa-solid fa-magnifying-glass"></i>
                 </button>
-                <input type="text" id="searchInput" placeholder="Cosa vuoi ascoltare oggi?"
+                <input type="search" id="searchInput" placeholder="Cosa vuoi ascoltare oggi?"
                     autocomplete="off" autocorrect="off" spellcheck="false"
                     data-lpignore="true" data-1p-ignore data-bwignore data-form-type="other">
                 <button id="filterToggleBtn" class="filter-btn" title="Filtri">
