@@ -564,6 +564,12 @@
             box-shadow: none;
             border: 1px solid rgba(240,240,242,0.18);
         }
+        /* Il contenitore della thumbnail nella lista canzoni ha un suo squircle (rounded-[24%])
+           che "inquadra" l'immagine: va reso cerchio anche lui, altrimenti resta visibile
+           dietro al cerchio dell'immagine. */
+        html.walkman .track-thumb-wrap {
+            border-radius: 50% !important;
+        }
         /* Cornice ed evidenziazione della card "più recente": stesso viola usato per la
            barra del minutaggio (--walkman-highlight), non più il bianco/argento di --accent,
            per restare coerente con l'unico accento colorato di questa skin. */
@@ -3105,7 +3111,7 @@
                 trackRow.style.animationDelay = `${Math.min(index - fromIndex, 20) * 45}ms`;
 
                 trackRow.innerHTML = `
-                    <div class="w-13 h-13 rounded-[24%] overflow-hidden shrink-0 flex items-center justify-center bg-neutral-800 relative" style="width:52px;height:52px;">
+                    <div class="w-13 h-13 rounded-[24%] overflow-hidden shrink-0 flex items-center justify-center bg-neutral-800 relative track-thumb-wrap" style="width:52px;height:52px;">
                         <img id="track-img-${index}" src="${track.id ? `https://img.youtube.com/vi/${track.id}/mqdefault.jpg` : (track.thumbnail || '')}" class="w-full h-full object-cover track-thumb-img" alt="" onload="this.classList.add('loaded')">
                         ${!track.id ? '<i class="fa-brands fa-spotify absolute bottom-0.5 right-0.5 text-[10px] text-[var(--accent)] drop-shadow"></i>' : ''}
                         ${isPlaying ? '<span class="track-playing-badge"><i class="fa-solid fa-volume-high"></i></span>' : ''}
