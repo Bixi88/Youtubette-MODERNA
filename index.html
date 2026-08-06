@@ -690,6 +690,16 @@
     </style>
 </head>
 <body class="flex flex-col justify-between hidden p-4 box-border h-full custom-bg-main relative">
+    <!-- Campi "esca" invisibili e non raggiungibili: servono solo a far sì che Chrome/Android
+         associno la classificazione "username/password" a QUESTI campi finti invece che ai
+         veri campi API Key più sotto nella pagina, che altrimenti vengono scambiati per una
+         coppia di credenziali (facendo comparire la barra suggerimenti password/carta/indirizzo
+         anche quando si tocca tutt'altro campo, es. la ricerca). Non hanno alcun effetto
+         funzionale: non vengono mai letti né inviati da nessuno script. -->
+    <div aria-hidden="true" style="position:absolute; width:1px; height:1px; overflow:hidden; opacity:0; pointer-events:none; left:-9999px;">
+        <input type="text" name="username" autocomplete="username" tabindex="-1">
+        <input type="password" name="password" autocomplete="new-password" tabindex="-1">
+    </div>
 
     <header class="shrink-0 z-40 relative">
         <!-- HEADER HOME: menu impostazioni + titolo + pillola di ricerca -->
