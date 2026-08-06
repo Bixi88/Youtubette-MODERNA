@@ -549,28 +549,40 @@
             --text-muted: #87878E;
         }
         html.walkman .qcard .circle,
-        html.walkman .settings-playlist-thumb,
-        html.walkman #miniPlayerImg,
-        html.walkman #sheetArtworkImg,
-        html.walkman .track-thumb-img {
+        html.walkman .settings-playlist-thumb {
             border-radius: 12% !important;
             box-shadow: none;
             border: 1px solid rgba(240,240,242,0.18);
         }
         html.walkman .qcard .circle { box-shadow: none; }
+        /* Artwork delle ricerche (risultati) e del miniplayer/now playing: cerchio invece
+           dello squircle usato per le altre copertine di questa skin. */
+        html.walkman #miniPlayerImg,
+        html.walkman #sheetArtworkImg,
+        html.walkman .track-thumb-img {
+            border-radius: 50% !important;
+            box-shadow: none;
+            border: 1px solid rgba(240,240,242,0.18);
+        }
         /* Cornice ed evidenziazione della card "più recente": stesso viola usato per la
            barra del minutaggio (--walkman-highlight), non più il bianco/argento di --accent,
            per restare coerente con l'unico accento colorato di questa skin. */
         html.walkman .qcard.latest .circle { box-shadow: 0 0 0 2px var(--walkman-highlight); border-color: transparent; }
         html.walkman .qcard.latest .name { color: var(--walkman-highlight); }
         html.walkman .track-row::after { background: rgba(240,240,242,0.10); }
-        html.walkman .menu-icon-btn,
         html.walkman .update-btn,
         html.walkman .results-header .back-btn,
         html.walkman .settings-playlist-remove {
             background: transparent;
             border: 1px solid rgba(240,240,242,0.2);
         }
+        /* Pulsante impostazioni: nessun cerchio/bordo (resta "invisibile" come nelle altre
+           skin), e le due barre diventano della stessa lunghezza invece di una più corta. */
+        html.walkman .menu-icon-btn {
+            background: transparent;
+            border: none;
+        }
+        html.walkman .menu-bars span:last-child { width: 100%; }
         html.walkman .search-pill {
             background: #0A0A0A;
             border: 1px solid rgba(240,240,242,0.22);
@@ -905,6 +917,19 @@
             </h3>
             
             <div class="mb-2">
+                <div class="theme-select-row">
+                    <div class="lbl">Tema</div>
+                    <div class="sub">Scegli l'aspetto dell'app</div>
+                    <div class="theme-select" id="themeSelect" role="tablist">
+                        <div class="theme-select-thumb" id="themeSelectThumb"></div>
+                        <div class="theme-opt" data-theme="moderna" role="tab">Moderna</div>
+                        <div class="theme-opt" data-theme="amoled" role="tab">Amoled</div>
+                        <div class="theme-opt" data-theme="walkman" role="tab">Walkman</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-2 mt-6 border-t border-white/5 pt-4">
                 <div class="flex items-center justify-between mb-2">
                     <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted">YouTube API Key (primaria)</label>
                     <span id="modalApiBadgeError" class="hidden text-[10px] font-bold text-red-500 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full animate-pulse">Chiave Non Valida</span>
@@ -918,19 +943,6 @@
                 <input type="text" id="modalApiKeyInput2" placeholder="Opzionale: usata solo se la primaria finisce la quota..." 
                     class="w-full text-xs px-4 py-3.5 rounded-xl border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white">
                 <p class="text-[10px] mt-1.5 custom-text-muted">Ordine: prima la chiave primaria, poi la secondaria se la prima esaurisce la quota, infine un fallback automatico senza chiave.</p>
-            </div>
-
-            <div class="mt-6 border-t border-white/5 pt-4">
-                <div class="theme-select-row">
-                    <div class="lbl">Tema</div>
-                    <div class="sub">Scegli l'aspetto dell'app</div>
-                    <div class="theme-select" id="themeSelect" role="tablist">
-                        <div class="theme-select-thumb" id="themeSelectThumb"></div>
-                        <div class="theme-opt" data-theme="moderna" role="tab">Moderna</div>
-                        <div class="theme-opt" data-theme="amoled" role="tab">Amoled</div>
-                        <div class="theme-opt" data-theme="walkman" role="tab">Walkman</div>
-                    </div>
-                </div>
             </div>
 
             <div class="mt-6 border-t border-white/5 pt-4">
