@@ -2759,12 +2759,16 @@
         }
 
         // Nome della playlist così come mostrato nei "Recenti" (home e Impostazioni):
-        // via la parola "Spotify" (sono tutte playlist Spotify, è ridondante) ed eventuali
-        // separatori rimasti orfani, poi al massimo 3 parole.
+        // le pagine Spotify aggiungono spesso, dopo il nome vero della playlist, un
+        // riferimento all'autore/creatore (es. "Nome - playlist by Autore", "Nome - Autore",
+        // "Nome by Autore"): lo scartiamo subito, tenendo solo la parte prima del
+        // separatore, così l'autore non finisce mai nei Recenti. Poi via la parola
+        // "Spotify" (sono tutte playlist Spotify, è ridondante), e al massimo 3 parole.
         function formatRecentPlaylistName(name) {
-            let cleaned = (name || '')
+            let cleaned = (name || '').trim();
+            cleaned = cleaned.split(/\s+(?:[-|–•]\s*(?:playlist\s+)?by\s+|[-|–•]\s+|by\s+)/i)[0].trim();
+            cleaned = cleaned
                 .replace(/\bspotify\b/gi, '')
-                .replace(/[|•\-–]+/g, ' ')
                 .replace(/\s{2,}/g, ' ')
                 .trim();
             if (!cleaned) cleaned = 'Playlist';
