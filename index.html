@@ -2011,6 +2011,11 @@
         const TRACK_CACHE_KEY = 'youtubette_track_cache';
         const TRACK_CACHE_MAX = 3000; // oltre questa soglia si scartano le voci più vecchie
 
+        // Stessa idea della cache-playlist: con migliaia di brani salvati, ri-parsare tutto
+        // il blob da localStorage ad ogni singolo play (anche solo per un cache-hit) costa
+        // tempo reale. Lo teniamo in memoria dopo la prima lettura.
+        let trackCacheMemory = null;
+
         // Chiave normalizzata: minuscolo, spazi compattati, per far combaciare piccole
         // differenze di maiuscole/spazi tra import diversi dello stesso brano.
         function trackCacheKey(title, channel) {
@@ -2019,15 +2024,18 @@
         }
 
         function loadTrackCache() {
+            if (trackCacheMemory) return trackCacheMemory;
             try {
                 const raw = JSON.parse(localStorage.getItem(TRACK_CACHE_KEY));
-                return raw && typeof raw === 'object' ? raw : {};
+                trackCacheMemory = raw && typeof raw === 'object' ? raw : {};
             } catch (err) {
-                return {};
+                trackCacheMemory = {};
             }
+            return trackCacheMemory;
         }
 
         function saveTrackCache(cache) {
+            trackCacheMemory = cache;
             try {
                 localStorage.setItem(TRACK_CACHE_KEY, JSON.stringify(cache));
             } catch (err) {
@@ -2041,7 +2049,10 @@
         }
 
         // Scrive/aggiorna una voce di cache. Il campo `ts` serve solo per la pulizia
-        // delle voci più vecchie quando si supera TRACK_CACHE_MAX.
+        // delle voci più vecchie quando si supera TRACK_CACHE_MAX. La scrittura su
+        // localStorage (potenzialmente pesante, fino a 3000 voci) è rimandata al prossimo
+        // tick: chi chiama questa funzione (l'avvio della riproduzione) non deve aspettarla,
+        // gli basta che track.id sia già impostato in memoria da applyResolvedId.
         function setCachedTrack(title, channel, { id = null, thumbnail = null } = {}) {
             if (!title) return;
             const cache = loadTrackCache();
@@ -2059,7 +2070,12 @@
                 const toRemove = keys.slice(0, keys.length - TRACK_CACHE_MAX);
                 toRemove.forEach(k => delete cache[k]);
             }
-            saveTrackCache(cache);
+            // La mutazione dell'oggetto in memoria è già effettiva qui sopra (stessa
+            // referenza di trackCacheMemory): un successivo getCachedTrack nello stesso
+            // istante vede già il dato aggiornato. Solo la scrittura su disco (la parte
+            // costosa, JSON.stringify di un blob che può avere migliaia di voci) è
+            // rimandata al prossimo tick per non ritardare l'avvio della riproduzione.
+            setTimeout(() => saveTrackCache(cache), 0);
         }
 
         // --- CACHE RICERCHE (testo cercato + filtri -> risultati YouTube) ---
