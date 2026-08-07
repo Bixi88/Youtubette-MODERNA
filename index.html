@@ -2133,16 +2133,24 @@
         const PLAYLIST_TRACKS_CACHE_MAX = 20; // oltre questa soglia si scartano le playlist meno recenti
         const PLAYLIST_TRACKS_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 giorni ("questo mese")
 
+        // Copia in memoria del blob completo: con molte playlist salvate, JSON.parse
+        // dell'intero blob ad ogni singolo brano risolto (anche in background) è lavoro
+        // sprecato. La leggiamo una sola volta da localStorage e riusiamo quella.
+        let playlistTracksCacheMemory = null;
+
         function loadPlaylistTracksCache() {
+            if (playlistTracksCacheMemory) return playlistTracksCacheMemory;
             try {
                 const raw = JSON.parse(localStorage.getItem(PLAYLIST_TRACKS_CACHE_KEY));
-                return raw && typeof raw === 'object' ? raw : {};
+                playlistTracksCacheMemory = raw && typeof raw === 'object' ? raw : {};
             } catch (err) {
-                return {};
+                playlistTracksCacheMemory = {};
             }
+            return playlistTracksCacheMemory;
         }
 
         function savePlaylistTracksCache(cache) {
+            playlistTracksCacheMemory = cache;
             try {
                 localStorage.setItem(PLAYLIST_TRACKS_CACHE_KEY, JSON.stringify(cache));
             } catch (err) {
@@ -3156,8 +3164,12 @@
             const cachedHit = getCachedTrack(track.title, track.channel);
             if (cachedHit && cachedHit.id) {
                 applyResolvedId(cachedHit.id, cachedHit.thumbnail);
+                // Aggiornamento della cache-playlist rimandato al prossimo tick: legge/scrive
+                // localStorage (può essere pesante con molte playlist salvate) e non deve
+                // ritardare l'avvio della riproduzione, che aspetta questa funzione.
                 if (currentListSource === 'spotify' && currentLoadedKey && currentLoadedKey.startsWith('playlist:')) {
-                    updateCachedPlaylistTrack(currentLoadedKey.slice('playlist:'.length), track.title, track.channel, { id: cachedHit.id, thumbnail: cachedHit.thumbnail });
+                    const plUrl = currentLoadedKey.slice('playlist:'.length);
+                    setTimeout(() => updateCachedPlaylistTrack(plUrl, track.title, track.channel, { id: cachedHit.id, thumbnail: cachedHit.thumbnail }), 0);
                 }
                 return true;
             }
@@ -3185,8 +3197,10 @@
                 // Se il brano appartiene a una playlist Spotify attualmente caricata,
                 // aggiorna anche la sua copia nella cache-playlist: così l'id resta
                 // pronto pure alla prossima riapertura dalla cache, non solo in questa sessione.
+                // Rimandato al prossimo tick per non ritardare l'avvio della riproduzione.
                 if (currentListSource === 'spotify' && currentLoadedKey && currentLoadedKey.startsWith('playlist:')) {
-                    updateCachedPlaylistTrack(currentLoadedKey.slice('playlist:'.length), track.title, track.channel, { id: track.id, thumbnail: track.thumbnail });
+                    const plUrl = currentLoadedKey.slice('playlist:'.length);
+                    setTimeout(() => updateCachedPlaylistTrack(plUrl, track.title, track.channel, { id: track.id, thumbnail: track.thumbnail }), 0);
                 }
 
                 return true;
