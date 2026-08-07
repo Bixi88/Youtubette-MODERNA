@@ -425,7 +425,9 @@
         .results-header { display:none; align-items:center; gap:14px; padding:6px 8px 0; height:40px; }
         .results-header.visible { display:flex; }
         .results-header .back-btn { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); flex:0 0 auto; }
-        .results-header .rt { font-size:20px; font-weight:700; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .results-header .rt { font-size:20px; font-weight:700; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto; }
+        .results-header .refresh-btn { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); flex:0 0 auto; font-size:13px; opacity:.85; }
+        .results-header .refresh-btn:active { transform:scale(0.9); }
 
         /* ================= HOME: griglia "Recenti" ================= */
         .quick-eyebrow { padding:22px 6px 4px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); font-weight:600; }
@@ -703,6 +705,9 @@
                 <i class="fa-solid fa-arrow-left"></i>
             </button>
             <span class="rt display" id="resultsTitle">Risultati</span>
+            <button id="refreshPlaylistBtn" class="hidden refresh-btn" title="Aggiorna playlist (ricarica da Spotify, salta la cache)">
+                <i class="fa-solid fa-rotate"></i>
+            </button>
         </div>
 
         <button id="pwaInstallBtn" class="hidden absolute top-2 right-2 text-[#1a1305] font-bold text-[10px] px-3 py-1.5 rounded-full active:scale-95 transition-transform custom-bg-accent z-50">
@@ -1373,6 +1378,11 @@
             });
             document.getElementById('backToHomeBtn').addEventListener('click', () => {
                 window.history.back();
+            });
+            document.getElementById('refreshPlaylistBtn').addEventListener('click', () => {
+                if (currentListSource === 'spotify' && currentLoadedKey && currentLoadedKey.startsWith('playlist:')) {
+                    importSpotifyPlaylist(currentLoadedKey.slice('playlist:'.length), true);
+                }
             });
 
             // --- SWIPE (destra -> sinistra) SULLA VISTA PLAYLIST PER RIAPRIRE LA LISTA CANZONI ATTIVA ---
@@ -2052,6 +2062,145 @@
             saveTrackCache(cache);
         }
 
+        // --- CACHE RICERCHE (testo cercato + filtri -> risultati YouTube) ---
+        // La ricerca testuale dalla barra in alto NON aveva alcuna cache: ripetere la
+        // stessa ricerca (anche a distanza di minuti) richiamava sempre l'API YouTube,
+        // consumando quota inutilmente. Qui teniamo in cache solo la PRIMA pagina di ogni
+        // ricerca (quella mostrata subito, prima di eventuali "carica altri"): se lo
+        // stesso testo, con gli stessi filtri, viene cercato di nuovo entro
+        // SEARCH_CACHE_TTL_MS, i risultati vengono riusati senza toccare la rete.
+        const SEARCH_CACHE_KEY = 'youtubette_search_cache';
+        const SEARCH_CACHE_MAX = 150; // oltre questa soglia si scartano le ricerche più vecchie
+        const SEARCH_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 giorni: risultati di ricerca YouTube restano validi a lungo
+
+        function searchCacheKey(query, filterDate, filterDuration) {
+            const norm = (query || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+            return `${norm}|||${filterDate || 'any'}|||${filterDuration || 'any'}`;
+        }
+
+        function loadSearchCache() {
+            try {
+                const raw = JSON.parse(localStorage.getItem(SEARCH_CACHE_KEY));
+                return raw && typeof raw === 'object' ? raw : {};
+            } catch (err) {
+                return {};
+            }
+        }
+
+        function saveSearchCache(cache) {
+            try {
+                localStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(cache));
+            } catch (err) {
+                console.warn('Impossibile salvare la cache delle ricerche:', err);
+            }
+        }
+
+        // Ritorna la ricerca in cache solo se non scaduta (SEARCH_CACHE_TTL_MS), altrimenti
+        // null: in quel caso si procede come sempre con una nuova chiamata all'API.
+        function getCachedSearch(query, filterDate, filterDuration) {
+            const cache = loadSearchCache();
+            const entry = cache[searchCacheKey(query, filterDate, filterDuration)];
+            if (!entry) return null;
+            if (Date.now() - (entry.ts || 0) > SEARCH_CACHE_TTL_MS) return null;
+            return entry;
+        }
+
+        function setCachedSearch(query, filterDate, filterDuration, { items, nextPageToken }) {
+            if (!query) return;
+            const cache = loadSearchCache();
+            const key = searchCacheKey(query, filterDate, filterDuration);
+            cache[key] = { items, nextPageToken: nextPageToken || '', ts: Date.now() };
+
+            const keys = Object.keys(cache);
+            if (keys.length > SEARCH_CACHE_MAX) {
+                keys.sort((a, b) => (cache[a].ts || 0) - (cache[b].ts || 0));
+                const toRemove = keys.slice(0, keys.length - SEARCH_CACHE_MAX);
+                toRemove.forEach(k => delete cache[k]);
+            }
+            saveSearchCache(cache);
+        }
+
+        // --- CACHE PLAYLIST (tracklist completa di una playlist Spotify importata) ---
+        // Finora riaprire una playlist (da "Recenti" in home o dal menu Impostazioni)
+        // rifaceva sempre la fetch alla pagina embed di Spotify e ricostruiva l'elenco da
+        // zero: lento, e per i brani non ancora ascoltati nessun id YouTube era pronto.
+        // Qui salviamo l'intero elenco (titoli, id YouTube già risolti, copertine) per
+        // ogni playlist aperta, con una scadenza: se la si riapre entro PLAYLIST_TRACKS_CACHE_TTL_MS,
+        // parte tutto dalla cache — istantaneo, zero fetch a Spotify e zero nuove ricerche
+        // YouTube per i brani già risolti in precedenza. Oltre la scadenza si rifà il giro
+        // normale (la playlist potrebbe essere cambiata nel frattempo).
+        const PLAYLIST_TRACKS_CACHE_KEY = 'youtubette_playlist_tracks_cache';
+        const PLAYLIST_TRACKS_CACHE_MAX = 20; // oltre questa soglia si scartano le playlist meno recenti
+        const PLAYLIST_TRACKS_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 giorni ("questo mese")
+
+        function loadPlaylistTracksCache() {
+            try {
+                const raw = JSON.parse(localStorage.getItem(PLAYLIST_TRACKS_CACHE_KEY));
+                return raw && typeof raw === 'object' ? raw : {};
+            } catch (err) {
+                return {};
+            }
+        }
+
+        function savePlaylistTracksCache(cache) {
+            try {
+                localStorage.setItem(PLAYLIST_TRACKS_CACHE_KEY, JSON.stringify(cache));
+            } catch (err) {
+                console.warn('Impossibile salvare la cache della playlist:', err);
+            }
+        }
+
+        // Ritorna la playlist in cache solo se non scaduta, altrimenti null (si rifà la fetch).
+        function getCachedPlaylistTracks(url) {
+            const cache = loadPlaylistTracksCache();
+            const entry = cache[url];
+            if (!entry) return null;
+            if (Date.now() - (entry.ts || 0) > PLAYLIST_TRACKS_CACHE_TTL_MS) return null;
+            return entry;
+        }
+
+        function setCachedPlaylistTracks(url, { name, artwork = null, tracks }) {
+            if (!url || !tracks) return;
+            const cache = loadPlaylistTracksCache();
+            cache[url] = { name, artwork, tracks, ts: Date.now() };
+
+            const keys = Object.keys(cache);
+            if (keys.length > PLAYLIST_TRACKS_CACHE_MAX) {
+                keys.sort((a, b) => (cache[a].ts || 0) - (cache[b].ts || 0));
+                const toRemove = keys.slice(0, keys.length - PLAYLIST_TRACKS_CACHE_MAX);
+                toRemove.forEach(k => delete cache[k]);
+            }
+            savePlaylistTracksCache(cache);
+        }
+
+        // Aggiorna in-place, nella cache di UNA playlist già salvata, l'id YouTube di un
+        // singolo brano appena risolto: così la prossima riapertura dalla cache trova
+        // anche i brani ascoltati DOPO il primo import già pronti, non solo quelli
+        // risolti al momento dell'import.
+        function updateCachedPlaylistTrack(url, title, channel, { id, thumbnail }) {
+            if (!url) return;
+            const cache = loadPlaylistTracksCache();
+            const entry = cache[url];
+            if (!entry || !entry.tracks) return;
+            const key = trackCacheKey(title, channel);
+            let changed = false;
+            entry.tracks.forEach(t => {
+                if (trackCacheKey(t.title, t.channel) === key) {
+                    if (id) { t.id = id; t.resolved = true; changed = true; }
+                    if (thumbnail && !t.thumbnail) { t.thumbnail = thumbnail; changed = true; }
+                }
+            });
+            if (changed) savePlaylistTracksCache(cache);
+        }
+
+        // Mostra il pulsante di aggiornamento manuale nell'header solo quando è aperta una
+        // playlist Spotify (permette di bypassare la cache se la playlist è stata modificata).
+        function updateRefreshPlaylistBtn(url) {
+            const btn = document.getElementById('refreshPlaylistBtn');
+            if (!btn) return;
+            btn.classList.toggle('hidden', !url);
+        }
+
         // --- SETTINGS: "Playlist Recenti" ---
         // Elenco dedicato (separato dai "Recenti" mostrati in home, che mischiano brani e
         // playlist e restano limitati a RECENT_MAX): qui teniamo fino a 9 playlist, mostrate
@@ -2341,6 +2490,7 @@
                     currentListSource = 'spotify';
                     showResultsView(currentLoadedTitle);
                     renderTracklist(0);
+                    updateRefreshPlaylistBtn(item.url);
                     return;
                 }
                 importSpotifyPlaylist(item.url);
@@ -2604,6 +2754,22 @@
                 toggleDownloadButtons(false);
                 document.getElementById('trackList').innerHTML = '';
                 if (resultsStatusText) resultsStatusText.classList.add('hidden');
+
+                // Stessa ricerca (testo + filtri) già fatta di recente: riusiamo i
+                // risultati in cache invece di richiamare l'API YouTube, per non
+                // consumare quota per una ricerca già eseguita poco prima.
+                const cachedSearch = getCachedSearch(query, appState.filterDate, appState.filterDuration);
+                if (cachedSearch) {
+                    nextSearchPageToken = cachedSearch.nextPageToken || '';
+                    appState.tracks = cachedSearch.items;
+                    renderTracklist(0);
+                    currentLoadedKey = 'query:' + query;
+                    currentLoadedTitle = query;
+                    updateRefreshPlaylistBtn(null);
+                    document.getElementById('apiErrorBadge')?.classList.add('hidden');
+                    document.getElementById('modalApiBadgeError').classList.add('hidden');
+                    return;
+                }
             } else isFetchingMore = true;
 
             try {
@@ -2639,6 +2805,10 @@
                 if (!isLoadMore) {
                     currentLoadedKey = 'query:' + query;
                     currentLoadedTitle = query;
+                    updateRefreshPlaylistBtn(null);
+                    // Cache solo della prima pagina: è quella che verrà riusata se lo
+                    // stesso testo/filtri vengono ricercati di nuovo a breve.
+                    setCachedSearch(query, activeFilterDate, activeFilterDuration, { items: newTracks, nextPageToken: nextSearchPageToken });
                 }
             } catch (error) {
                 showVisualApiError();
@@ -2812,7 +2982,7 @@
             return null;
         }
 
-        async function importSpotifyPlaylist(url) {
+        async function importSpotifyPlaylist(url, forceRefresh = false) {
             const resultsStatusText = document.getElementById('resultsStatusText');
             const playlistId = extractSpotifyPlaylistId(url);
 
@@ -2824,6 +2994,25 @@
                     resultsStatusText.classList.remove('hidden');
                     resultsStatusText.innerText = 'Link playlist Spotify non valido.';
                 }
+                return;
+            }
+
+            // Playlist già aperta di recente (entro PLAYLIST_TRACKS_CACHE_TTL_MS): la
+            // ricarichiamo di peso dalla cache locale, senza toccare né Spotify né YouTube.
+            const cachedPlaylist = forceRefresh ? null : getCachedPlaylistTracks(url);
+            if (cachedPlaylist) {
+                currentListSource = 'spotify';
+                nextSearchPageToken = '';
+                appState.tracks = cachedPlaylist.tracks.map(t => ({ ...t }));
+                appState.currentIndex = -1;
+                toggleDownloadButtons(false);
+                showResultsView(cachedPlaylist.name);
+                renderTracklist(0);
+                currentLoadedKey = 'playlist:' + url;
+                currentLoadedTitle = cachedPlaylist.name;
+                updateRefreshPlaylistBtn(url);
+                addRecentItem({ name: cachedPlaylist.name, type: 'playlist', url, artwork: cachedPlaylist.artwork });
+                addRecentPlaylist({ name: cachedPlaylist.name, url, artwork: cachedPlaylist.artwork });
                 return;
             }
 
@@ -2876,6 +3065,10 @@
                 const recentName = formatRecentPlaylistName(meta.name);
                 addRecentItem({ name: recentName, type: 'playlist', url, artwork: playlistArtwork });
                 addRecentPlaylist({ name: recentName, url, artwork: playlistArtwork });
+                // Salva l'intero elenco (con gli id già risolti) per la prossima apertura:
+                // entro 30 giorni si riaprirà all'istante, senza fetch né nuova quota.
+                setCachedPlaylistTracks(url, { name: recentName, artwork: playlistArtwork, tracks: appState.tracks });
+                updateRefreshPlaylistBtn(url);
             } catch (err) {
                 console.warn('Import playlist Spotify fallito:', err);
                 if (resultsStatusText) {
@@ -2924,27 +3117,12 @@
         async function resolveYoutubeIdForTrack(track, index, updateRowUI = true) {
             const query = `${track.title} ${track.channel}`;
 
-            try {
-                const data = await youtubeSearch({ q: query, maxResults: 1 });
-                // Solo QUESTO è un vero problema di chiavi/API (nessuna delle 3 fonti ha risposto):
-                // mostra il badge di errore. Se invece l'API ha risposto ma semplicemente non c'è
-                // un video corrispondente a questo brano, non è un problema di chiave: niente badge,
-                // si passa direttamente al messaggio "brano non trovato" più sotto.
-                if (!data) {
-                    showVisualApiError();
-                    throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
-                }
-                if (!data.items || data.items.length === 0) throw new Error('Nessun video YouTube trovato per questo brano.');
-
-                const item = data.items[0];
-                track.id = item.id.videoId;
-                // Se il brano ha già una copertina iTunes, la manteniamo: sostituirla con
-                // la miniatura YouTube proprio nel momento in cui parte la riproduzione
-                // creava un fastidioso "salto" visivo. La miniatura YouTube resta solo
-                // come ripiego per i brani senza copertina iTunes trovata.
-                if (!track.thumbnail) {
-                    track.thumbnail = item.snippet.thumbnails.high ? item.snippet.thumbnails.high.url : item.snippet.thumbnails.default.url;
-                }
+            // Applica un id YouTube (video già trovato, in cache o via nuova ricerca) al
+            // brano e aggiorna l'interfaccia: fattorizzato perché lo stesso identico
+            // aggiornamento serve sia in caso di hit sulla cache sia dopo una ricerca vera.
+            function applyResolvedId(id, thumbnailUrl) {
+                track.id = id;
+                if (!track.thumbnail && thumbnailUrl) track.thumbnail = thumbnailUrl;
                 track.resolved = true;
 
                 document.getElementById('apiErrorBadge')?.classList.add('hidden');
@@ -2969,10 +3147,47 @@
                     const badge = img?.parentElement?.querySelector('.fa-spotify');
                     if (badge) badge.remove();
                 }
+            }
+
+            // Controllo difensivo: se nel frattempo questo brano (stesso titolo+artista) è
+            // già stato risolto altrove, per esempio ascoltato da un'altra playlist importata,
+            // riusiamo subito l'id in cache invece di rifare una ricerca YouTube che
+            // consumerebbe quota inutilmente.
+            const cachedHit = getCachedTrack(track.title, track.channel);
+            if (cachedHit && cachedHit.id) {
+                applyResolvedId(cachedHit.id, cachedHit.thumbnail);
+                if (currentListSource === 'spotify' && currentLoadedKey && currentLoadedKey.startsWith('playlist:')) {
+                    updateCachedPlaylistTrack(currentLoadedKey.slice('playlist:'.length), track.title, track.channel, { id: cachedHit.id, thumbnail: cachedHit.thumbnail });
+                }
+                return true;
+            }
+
+            try {
+                const data = await youtubeSearch({ q: query, maxResults: 1 });
+                // Solo QUESTO è un vero problema di chiavi/API (nessuna delle 3 fonti ha risposto):
+                // mostra il badge di errore. Se invece l'API ha risposto ma semplicemente non c'è
+                // un video corrispondente a questo brano, non è un problema di chiave: niente badge,
+                // si passa direttamente al messaggio "brano non trovato" più sotto.
+                if (!data) {
+                    showVisualApiError();
+                    throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
+                }
+                if (!data.items || data.items.length === 0) throw new Error('Nessun video YouTube trovato per questo brano.');
+
+                const item = data.items[0];
+                const thumbnailUrl = item.snippet.thumbnails.high ? item.snippet.thumbnails.high.url : item.snippet.thumbnails.default.url;
+                applyResolvedId(item.id.videoId, thumbnailUrl);
 
                 // Salva in cache: se questo brano ricompare (stessa o altra playlist),
                 // il prossimo avvio lo riprodurrà subito senza rifare la ricerca YouTube.
                 setCachedTrack(track.title, track.channel, { id: track.id, thumbnail: track.thumbnail });
+
+                // Se il brano appartiene a una playlist Spotify attualmente caricata,
+                // aggiorna anche la sua copia nella cache-playlist: così l'id resta
+                // pronto pure alla prossima riapertura dalla cache, non solo in questa sessione.
+                if (currentListSource === 'spotify' && currentLoadedKey && currentLoadedKey.startsWith('playlist:')) {
+                    updateCachedPlaylistTrack(currentLoadedKey.slice('playlist:'.length), track.title, track.channel, { id: track.id, thumbnail: track.thumbnail });
+                }
 
                 return true;
             } catch (err) {
