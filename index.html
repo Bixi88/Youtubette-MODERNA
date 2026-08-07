@@ -7,11 +7,9 @@
         // sbagliato all'apertura: stessa logica dello sfondo critico qui sotto.
         try {
             var savedTheme = localStorage.getItem('youtubette_theme');
-            if (!savedTheme) {
-                // Migrazione dal vecchio interruttore booleano AMOLED (versioni precedenti)
-                savedTheme = (localStorage.getItem('youtubette_amoled') === '1') ? 'amoled' : 'moderna';
-            }
-            if (savedTheme === 'amoled' || savedTheme === 'walkman') {
+            // Il tema Amoled è stato rimosso: chi lo aveva impostato torna a "Moderna".
+            if (savedTheme === 'amoled') savedTheme = 'moderna';
+            if (savedTheme === 'walkman') {
                 document.documentElement.classList.add(savedTheme);
             }
         } catch (e) {}
@@ -75,11 +73,11 @@
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0D0E12" id="metaThemeColorDark">
     <script>
         // Stesso principio dello sfondo/tema "critico" qui sopra: se all'apertura è già salvato
-        // amoled/walkman (sfondo nero puro, non il viola/blu di "Moderna"), allinea SUBITO anche
+        // walkman (sfondo nero puro, non il viola/blu di "Moderna"), allinea SUBITO anche
         // il colore della barra di stato di sistema, altrimenti resterebbe quello di "Moderna"
         // finché il resto dello script più in basso non lo corregge (piccolo "flash" di colore).
         try {
-            if (savedTheme === 'amoled' || savedTheme === 'walkman') {
+            if (savedTheme === 'walkman') {
                 document.getElementById('metaThemeColor')?.setAttribute('content', '#000000');
                 document.getElementById('metaThemeColorDark')?.setAttribute('content', '#000000');
             }
@@ -467,77 +465,6 @@
         .track-row:last-child::after { display:none; }
         .track-playing-badge { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(0,0,0,.35); color:var(--accent); }
 
-        /* ================= SKIN "AMOLED" (opzionale, attivabile dalle Impostazioni) =================
-           Nero puro ovunque (niente più gradiente viola) e componenti chiave "svuotati":
-           invece di sfondi colorati pieni, un bordo sottile bianco/grigio a fare da cornice,
-           ispirato alle icone outline di App Prompter. Niente accento arancione in questa skin:
-           l'accento diventa lo stesso bianco "paper" del testo. Le copertine, solo qui, sono in
-           bianco e nero. */
-        html.amoled {
-            --bg-main: #000000;
-            --bg-gradient-top: #000000;
-            --bg-card: #000000;
-            --bg-input: #000000;
-            --accent: #F3EFE6;
-        }
-        html.amoled .qcard .circle,
-        html.amoled .settings-playlist-thumb,
-        html.amoled #miniPlayerImg,
-        html.amoled #sheetArtworkImg,
-        html.amoled .track-thumb-img {
-            filter: grayscale(1);
-        }
-        html.amoled .qcard {
-            border: 1.5px solid rgba(243,239,230,0.22);
-            border-radius: 24px;
-            padding: 10px 8px 12px;
-        }
-        html.amoled .qcard .circle {
-            border: none;
-            box-shadow: none;
-        }
-        html.amoled .qcard.latest {
-            border-color: transparent;
-            box-shadow: 0 0 0 2px var(--accent);
-        }
-        /* Riga della canzone in riproduzione: prima era evidenziata solo dal colore
-           d'accento sul titolo (ora bianco come il resto, quindi non basta più a
-           distinguerla); in AMOLED la incornicio con lo stesso stile squircle. */
-        html.amoled .track-row.playing {
-            border: 1.5px solid #ffffff;
-            border-radius: 18px;
-            padding: 8px 10px;
-            margin: 4px 0;
-            transition: none;
-        }
-        html.amoled .track-row.playing::after { display: none; }
-        html.amoled .menu-icon-btn,
-        html.amoled .update-btn,
-        html.amoled .results-header .back-btn,
-        html.amoled .settings-playlist-remove {
-            background: transparent;
-            border: 1.5px solid rgba(243,239,230,0.22);
-        }
-        html.amoled .search-pill {
-            background: #000000;
-            border: 1.5px solid rgba(243,239,230,0.25);
-        }
-        html.amoled .search-pill #searchInput { color: var(--text-main) !important; }
-        html.amoled .search-pill #searchInput::placeholder { color: var(--text-muted); }
-        html.amoled .search-pill .mag-btn,
-        html.amoled .search-pill .filter-btn { color: var(--text-main) !important; }
-        html.amoled .search-pill .filter-btn.active { color: var(--accent) !important; }
-        html.amoled .glass-panel,
-        html.amoled .settings-sheet,
-        html.amoled .filter-drop {
-            border: 1px solid rgba(243,239,230,0.16);
-            backdrop-filter: none;
-            -webkit-backdrop-filter: none;
-        }
-        html.amoled #modalApiKeyInput,
-        html.amoled #modalApiKeyInput2 {
-            border: 1.5px solid rgba(243,239,230,0.18) !important;
-        }
         /* ================= SKIN "WALKMAN" (opzionale, attivabile dalle Impostazioni) =================
            Ispirata ai lettori musicali hi-fi portatili: nero pieno, un argento freddo al posto
            del "paper" caldo delle altre skin, copertine squadrate con un bordo sottile invece
@@ -671,7 +598,7 @@
            a mano con mask-image usato in precedenza. Il colore è già impostato dalla regola
            "html.walkman #playPauseBtn i / #miniPlayPauseBtn i" più in alto in questo file. */
 
-        /* ================= Selettore Tema (Moderna / Amoled / Walkman) ================= */
+        /* ================= Selettore Tema (Moderna / Walkman) ================= */
         .theme-select-row .lbl { font-size:13px; font-weight:600; color:var(--text-main); }
         .theme-select-row .sub { font-size:11px; color:var(--text-muted); margin-top:2px; margin-bottom:10px; }
         .theme-select { position:relative; display:flex; gap:6px; background:var(--bg-input); padding:4px; border-radius:14px; }
@@ -793,7 +720,7 @@
                     <div id="recentGrid" class="quick-grid hidden"></div>
                     <div id="emptyHome" class="empty-home">
                         <i class="fa-solid fa-magnifying-glass"></i>
-                        <p>Usa la barra di ricerca in alto per cercare brani, oppure incolla il link di una playlist Spotify.<br>Le tue ultime ricerche appariranno qui.</p>
+                        <p>Usa la barra di ricerca in alto per cercare brani, oppure incolla il link di una playlist Spotify.<br>Le tue ultime playlist appariranno qui.</p>
                     </div>
                 </div>
                 <!-- VISTA 2: Lista Canzoni (risultati ricerca / playlist aperta) -->
@@ -939,7 +866,6 @@
                     <div class="theme-select" id="themeSelect" role="tablist">
                         <div class="theme-select-thumb" id="themeSelectThumb"></div>
                         <div class="theme-opt" data-theme="moderna" role="tab">Moderna</div>
-                        <div class="theme-opt" data-theme="amoled" role="tab">Amoled</div>
                         <div class="theme-opt" data-theme="walkman" role="tab">Walkman</div>
                     </div>
                 </div>
@@ -979,8 +905,9 @@
     </div>
 
     <script>
-        // Estetica unica dell'app (niente più palette multiple/AMOLED): i colori sono
-        // fissi, definiti nel token system CSS in testa al documento.
+        // Le due skin disponibili (Moderna e Walkman) sono definite tramite variabili CSS
+        // (token system) in testa al documento; il tema attivo viene applicato aggiungendo/
+        // rimuovendo la classe "walkman" su <html> (vedi selettore tema più sotto).
         let appState = {
             apiKey: localStorage.getItem('youtubette_api_key') || '',
             apiKey2: localStorage.getItem('youtubette_api_key_2') || '',
@@ -1525,7 +1452,7 @@
             });
             document.getElementById('modalSaveBtn').addEventListener('click', saveSettingsFromModal);
 
-            // ================= Selettore Tema (Moderna / Amoled / Walkman) =================
+            // ================= Selettore Tema (Moderna / Walkman) =================
             const themeSelectEl = document.getElementById('themeSelect');
             const themeThumbEl = document.getElementById('themeSelectThumb');
             const themeOptEls = themeSelectEl ? Array.from(themeSelectEl.querySelectorAll('.theme-opt')) : [];
@@ -1558,17 +1485,17 @@
                 }
             }
             // Tiene allineato il colore della barra di stato di sistema (status bar Android/iOS,
-            // scheda del task switcher) con lo sfondo reale dell'app: Amoled e Walkman portano
+            // scheda del task switcher) con lo sfondo reale dell'app: Walkman porta
             // --bg-main a nero puro, quindi anche qui deve diventare nero, non restare sul
             // viola/blu di "Moderna" come accadeva prima (nessun aggiornamento a runtime).
             function updateMetaThemeColor(theme) {
-                const color = (theme === 'amoled' || theme === 'walkman') ? '#000000' : '#0D0E12';
+                const color = (theme === 'walkman') ? '#000000' : '#0D0E12';
                 document.getElementById('metaThemeColor')?.setAttribute('content', color);
                 document.getElementById('metaThemeColorDark')?.setAttribute('content', color);
             }
             function setTheme(theme) {
-                if (theme !== 'amoled' && theme !== 'walkman') theme = 'moderna';
-                document.documentElement.classList.remove('amoled', 'walkman');
+                if (theme !== 'walkman') theme = 'moderna';
+                document.documentElement.classList.remove('walkman');
                 if (theme !== 'moderna') document.documentElement.classList.add(theme);
                 applyWalkmanIcons(theme === 'walkman');
                 updateMetaThemeColor(theme);
@@ -1578,14 +1505,11 @@
                 themeInitDone = true;
                 try {
                     localStorage.setItem('youtubette_theme', theme);
-                    // Retrocompatibilità con la vecchia chiave booleana, nel caso si torni a una build precedente
-                    localStorage.setItem('youtubette_amoled', theme === 'amoled' ? '1' : '0');
                 } catch (e) {}
             }
             if (themeSelectEl) {
                 let currentTheme = 'moderna';
-                if (document.documentElement.classList.contains('amoled')) currentTheme = 'amoled';
-                else if (document.documentElement.classList.contains('walkman')) currentTheme = 'walkman';
+                if (document.documentElement.classList.contains('walkman')) currentTheme = 'walkman';
                 setTheme(currentTheme);
                 themeOptEls.forEach(opt => {
                     opt.addEventListener('click', () => setTheme(opt.dataset.theme));
@@ -2265,9 +2189,10 @@
         }
 
         // --- HOME: "Recenti" ---
-        // Cache automatica (non più gestita a mano) delle ultime 6 ricerche eseguite dalla
-        // barra in alto: sia ricerche di brani su YouTube, sia playlist Spotify incollate.
-        // Salvata in localStorage; la più recente viene evidenziata con l'accento (.latest).
+        // Cache automatica (non più gestita a mano) delle ultime playlist Spotify importate
+        // dalla barra in alto. Salvata in localStorage; la più recente viene evidenziata
+        // con l'accento (.latest). Contiene SOLO playlist: le singole canzoni cercate su
+        // YouTube non vengono più mostrate qui.
         const RECENT_STORAGE_KEY = 'youtubette_recent';
         const RECENT_MAX = 6;
 
@@ -2275,12 +2200,9 @@
             try {
                 const raw = JSON.parse(localStorage.getItem(RECENT_STORAGE_KEY));
                 let items = Array.isArray(raw) ? raw : [];
-                // Migrazione: le voci "canzone" salvate prima che venisse memorizzato anche
-                // il brano completo non hanno "track" e non possono più riportare direttamente
-                // alla sheet (ripiegherebbero sulla vecchia ricerca). Le scartiamo qui, così
-                // il pannello Recenti mostra solo voci che funzionano col nuovo comportamento;
-                // le playlist Spotify non sono toccate, non dipendono da questo campo.
-                const cleaned = items.filter(it => it.type !== 'song' || it.track);
+                // Migrazione: scarta eventuali vecchie voci "canzone" salvate prima che i
+                // Recenti diventassero un elenco di sole playlist.
+                const cleaned = items.filter(it => it.type === 'playlist');
                 if (cleaned.length !== items.length) saveRecentItems(cleaned);
                 return cleaned;
             } catch (err) {
@@ -2296,18 +2218,14 @@
             }
         }
 
-        // Aggiunge (o riporta in cima, se già presente) una voce alla cache Recenti.
-        // type: 'song' per una ricerca YouTube, 'playlist' per un import Spotify.
+        // Aggiunge (o riporta in cima, se già presente) una playlist alla cache Recenti.
+        // type è sempre 'playlist': i Recenti mostrano solo playlist importate da Spotify.
         function addRecentItem({ name, type, query = null, url = null, artwork = null, track = null }) {
             if (!name) return;
             let items = loadRecentItems();
             items = items.filter(it => {
                 if (it.type !== type) return true;
                 if (type === 'playlist') return it.url !== url;
-                // 'song': la stessa canzone va sostituita (non duplicata) in cima ai Recenti,
-                // identificata dal video invece che dal testo digitato in ricerca, che può
-                // essere diverso pur portando alla stessa canzone.
-                if (track && track.id && it.track && it.track.id) return it.track.id !== track.id;
                 return it.query !== query;
             });
             items.unshift({ name, type, query, url, artwork, track, ts: Date.now() });
@@ -2334,7 +2252,7 @@
             grid.innerHTML = items.map((it, i) => `
                 <div class="qcard${i === 0 ? ' latest' : ''}" data-index="${i}">
                     <div class="circle" style="${it.artwork ? `background-image:url('${it.artwork.replace(/'/g, "\\'")}')` : ''}">
-                        <span class="badge"><i class="fa-solid ${it.type === 'playlist' ? 'fa-list' : 'fa-music'}"></i></span>
+                        <span class="badge"><i class="fa-solid fa-list"></i></span>
                         <button class="qcard-delete" data-index="${i}" title="Rimuovi">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
@@ -2426,29 +2344,6 @@
                     return;
                 }
                 importSpotifyPlaylist(item.url);
-            } else if (item.type === 'song' && item.track) {
-                currentLoadedKey = 'song:' + item.track.id;
-                currentListSource = 'youtube';
-                appState.tracks = [item.track];
-                nextSearchPageToken = '';
-                toggleDownloadButtons(true);
-                loadTrack(0);
-                openNowPlayingSheetWhenArtworkReady();
-            } else if (item.query) {
-                const key = 'query:' + item.query;
-                if (currentLoadedKey === key && appState.tracks.length > 0) {
-                    // Stessa ricerca già in memoria: la mostriamo di nuovo senza richiamare
-                    // l'API YouTube (evita di consumare quota inutilmente).
-                    currentListSource = 'youtube';
-                    searchInput.value = item.query;
-                    showResultsView(item.query);
-                    renderTracklist(0);
-                    return;
-                }
-                // Voci "Recenti" più vecchie, salvate prima che venisse memorizzato anche il
-                // brano: in mancanza del brano completo, ripieghiamo sulla ricerca come prima.
-                searchInput.value = item.query;
-                performSearch(false);
             }
         }
 
@@ -2860,7 +2755,20 @@
                     console.warn('Impossibile estrarre nome/copertina playlist:', err);
                 }
             }
-            return { name: name || 'Playlist Spotify', cover };
+            return { name: name || 'Playlist', cover };
+        }
+
+        // Nome della playlist così come mostrato nei "Recenti" (home e Impostazioni):
+        // via la parola "Spotify" (sono tutte playlist Spotify, è ridondante) ed eventuali
+        // separatori rimasti orfani, poi al massimo 3 parole.
+        function formatRecentPlaylistName(name) {
+            let cleaned = (name || '')
+                .replace(/\bspotify\b/gi, '')
+                .replace(/[|•\-–]+/g, ' ')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+            if (!cleaned) cleaned = 'Playlist';
+            return cleaned.split(/\s+/).slice(0, 3).join(' ');
         }
 
         // Copertina di ripiego per una playlist Spotify senza cover propria (og:image assente
@@ -2909,7 +2817,7 @@
 
             currentListSource = 'spotify';
             nextSearchPageToken = '';
-            showResultsView('Playlist Spotify');
+            showResultsView('Ricerca in corso');
             appState.tracks = []; appState.currentIndex = -1;
             toggleDownloadButtons(false);
             document.getElementById('trackList').innerHTML = '';
@@ -2952,8 +2860,9 @@
                 currentLoadedKey = 'playlist:' + url;
                 currentLoadedTitle = meta.name;
                 const playlistArtwork = meta.cover || await pickRandomPlaylistArtwork(rawTracks);
-                addRecentItem({ name: meta.name, type: 'playlist', url, artwork: playlistArtwork });
-                addRecentPlaylist({ name: meta.name, url, artwork: playlistArtwork });
+                const recentName = formatRecentPlaylistName(meta.name);
+                addRecentItem({ name: recentName, type: 'playlist', url, artwork: playlistArtwork });
+                addRecentPlaylist({ name: recentName, url, artwork: playlistArtwork });
             } catch (err) {
                 console.warn('Import playlist Spotify fallito:', err);
                 if (resultsStatusText) {
@@ -3163,6 +3072,11 @@
         // altro.
         let nowPlayingTracks = [];
         let nowPlayingIndex = -1;
+        // true quando il brano "in ascolto" attuale NON ha in realtà nessun video
+        // caricato nel player (risoluzione YouTube fallita): serve a impedire che il
+        // tasto play riprenda semplicemente l'ultimo video rimasto caricato nell'iframe
+        // nascosto (il brano precedente), facendolo sentire "sotto" per errore.
+        let nowPlayingUnavailable = false;
 
         // sourceTracks: la lista da cui viene il brano da caricare. Di default è la lista
         // attualmente mostrata (appState.tracks, es. quando l'utente tocca una riga), ma
@@ -3185,6 +3099,9 @@
             // in sottofondo per tutta l'attesa. Pausa subito, poi si riparte pulito
             // con il nuovo brano quando è pronto.
             if (player?.pauseVideo) { try { player.pauseVideo(); } catch (e) {} }
+            // Nuovo brano in caricamento: finché non sappiamo se ha davvero un video
+            // riproducibile, il tasto play non deve poter riprendere quello vecchio.
+            nowPlayingUnavailable = false;
 
             // CARICAMENTO SUCESSIVO PREVENTIVO ED ESCLUSIVO (solo per liste da ricerca YouTube,
             // le playlist importate da Spotify non hanno paginazione YouTube):
@@ -3247,18 +3164,8 @@
                 displayArtwork(miniImg, track.id);
             }
 
-            // Registra nei "Recenti" la canzone effettivamente scelta e ascoltata (titolo +
-            // artista reali), non il testo digitato in ricerca: la voce va creata qui, al
-            // momento della riproduzione, non quando si eseguiva la ricerca.
-            if (currentListSource === 'youtube' && track.id) {
-                addRecentItem({
-                    name: `${track.title} - ${track.channel}`,
-                    type: 'song',
-                    query: track.id,
-                    artwork: track.thumbnail || `https://img.youtube.com/vi/${track.id}/mqdefault.jpg`,
-                    track
-                });
-            }
+            // Nota: i "Recenti" mostrano solo playlist, non singole canzoni ascoltate:
+            // qui non viene più registrato nulla per i brani da ricerca YouTube.
 
             if (miniPlayer) {
                 miniPlayer.classList.add('visible');
@@ -3303,7 +3210,18 @@
                 // lista in ascolto), non riprodurre questo (arriverebbe "in ritardo" sopra
                 // quello attuale).
                 if (nowPlayingTracks !== sourceTracks || nowPlayingIndex !== index) return;
-                if (!resolved) return; // nessun video trovato/errore: non riproduce nulla
+                if (!resolved) {
+                    // Nessun video trovato/errore: non deve riprodurre nulla. Il player era
+                    // solo in pausa (non svuotato), quindi un successivo tap su play
+                    // manderebbe avanti l'ultimo video ancora caricato (il brano
+                    // precedente): lo fermiamo del tutto e blocchiamo il tasto play finché
+                    // non si sceglie un altro brano.
+                    nowPlayingUnavailable = true;
+                    if (player?.stopVideo) { try { player.stopVideo(); } catch (e) {} }
+                    appState.isPlaying = false;
+                    setPlayIconState(false);
+                    return;
+                }
 
                 if (track.spotifyImport) {
                     // Solo se non esisteva già una copertina iTunes: qui track.thumbnail
@@ -3382,6 +3300,10 @@
 
         function togglePlay() {
             if (!player || nowPlayingIndex === -1) return;
+            // Il brano attuale non ha un video valido (risoluzione fallita): non fare
+            // ripartire il player, altrimenti riprenderebbe l'ultimo video ancora
+            // caricato nell'iframe, cioè il brano precedente.
+            if (nowPlayingUnavailable) return;
             if (appState.isPlaying) player.pauseVideo(); else player.playVideo();
         }
 
