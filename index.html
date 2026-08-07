@@ -2758,6 +2758,21 @@
             return { name: name || 'Playlist', cover };
         }
 
+        // Nome "pulito" della playlist: le pagine Spotify aggiungono spesso, dopo il nome
+        // vero, un riferimento all'autore/creatore (es. "Nome - playlist by Autore",
+        // "Nome - Autore", "Nome by Autore") e la dicitura "Spotify". Li scartiamo
+        // entrambi: usato sia per il titolo mostrato in cima ai risultati sia (con in
+        // più il limite a 3 parole) per i "Recenti".
+        function cleanSpotifyPlaylistName(name) {
+            let cleaned = (name || '').trim();
+            cleaned = cleaned.split(/\s+(?:[-|–•]\s*(?:playlist\s+)?by\s+|[-|–•]\s+|by\s+)/i)[0].trim();
+            cleaned = cleaned
+                .replace(/\bspotify\b/gi, '')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+            return cleaned || 'Playlist';
+        }
+
         // Nome della playlist così come mostrato nei "Recenti" (home e Impostazioni):
         // le pagine Spotify aggiungono spesso, dopo il nome vero della playlist, un
         // riferimento all'autore/creatore (es. "Nome - playlist by Autore", "Nome - Autore",
@@ -2765,14 +2780,7 @@
         // separatore, così l'autore non finisce mai nei Recenti. Poi via la parola
         // "Spotify" (sono tutte playlist Spotify, è ridondante), e al massimo 3 parole.
         function formatRecentPlaylistName(name) {
-            let cleaned = (name || '').trim();
-            cleaned = cleaned.split(/\s+(?:[-|–•]\s*(?:playlist\s+)?by\s+|[-|–•]\s+|by\s+)/i)[0].trim();
-            cleaned = cleaned
-                .replace(/\bspotify\b/gi, '')
-                .replace(/\s{2,}/g, ' ')
-                .trim();
-            if (!cleaned) cleaned = 'Playlist';
-            return cleaned.split(/\s+/).slice(0, 3).join(' ');
+            return cleanSpotifyPlaylistName(name).split(/\s+/).slice(0, 3).join(' ');
         }
 
         // Copertina di ripiego per una playlist Spotify senza cover propria (og:image assente
@@ -2860,9 +2868,10 @@
                 renderTracklist(0);
 
                 const meta = extractSpotifyPlaylistMeta(fetched);
-                showResultsView(meta.name);
+                const cleanName = cleanSpotifyPlaylistName(meta.name);
+                showResultsView(cleanName);
                 currentLoadedKey = 'playlist:' + url;
-                currentLoadedTitle = meta.name;
+                currentLoadedTitle = cleanName;
                 const playlistArtwork = meta.cover || await pickRandomPlaylistArtwork(rawTracks);
                 const recentName = formatRecentPlaylistName(meta.name);
                 addRecentItem({ name: recentName, type: 'playlist', url, artwork: playlistArtwork });
