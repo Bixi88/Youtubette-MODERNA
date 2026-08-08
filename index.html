@@ -776,6 +776,8 @@
            icona bianca piena invece del viola di --accent. Resta disabilitato/appannato
            (opacity-30 già in classe HTML), qui sistemo solo colori e forma. */
         html.frosted #sheetDownloadBtn {
+            width: 38px; height: 38px;
+            display: flex; align-items: center; justify-content: center;
             background: var(--frosted-btn);
             border: 1px solid rgba(255,255,255,0.35);
             border-radius: 50%;
@@ -796,11 +798,12 @@
             color: #fff !important;
         }
         html.frosted .theme-opt.active { color: var(--frosted-highlight); }
-        /* Pillola del tab "Frosted" nel selettore: il blu-notte scuro (#0A2F5C) non
-           piaceva — sostituito con l'azzurro chiaro dello sfondo stesso (lo stesso
-           teal di --bg-gradient-top), con dentro il testo nell'indaco-violetto
-           dell'highlight invece del bianco. */
-        html.frosted .theme-select-thumb { background: var(--bg-gradient-top); }
+        /* Pillola del tab "Frosted" nel selettore: il primo tentativo (azzurro pallido
+           = --bg-gradient-top) aveva quasi la stessa luminosità del testo viola sopra —
+           contrasto reale ~1.5:1, praticamente illeggibile. Questo blu-petrolio più
+           profondo resta chiaramente "azzurro" (non il blu-notte quasi nero di prima)
+           ma è scuro abbastanza da far risaltare il viola chiaro sopra (~3.5:1). */
+        html.frosted .theme-select-thumb { background: #1C4A63; }
 
         /* ================= Selettore Tema (Moderna / Walkman) ================= */
         .theme-select-row .lbl { font-size:13px; font-weight:600; color:var(--text-main); }
