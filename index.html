@@ -197,6 +197,13 @@
         #nowPlayingSheet.expanded {
             transform: translateY(-100%);
         }
+        /* Comparsa scaglionata di header/controlli durante l'apertura/chiusura hero
+           (vedi updateHeroArtwork in JS): l'opacità/transform vengono impostati inline
+           frame per frame, questa transition serve solo a smorzare eventuali scatti
+           quando lo stato passa da drag manuale a settle automatico. */
+        #sheetBottomControls, #sheetHeaderDrag {
+            transition: opacity 0.12s linear;
+        }
 
         #miniPlayer {
             transform: translateY(150%);
@@ -1042,6 +1049,14 @@
         </div>
     </div>
 
+    <!-- Hero Artwork: copia "volante" della copertina, usata SOLO durante l'apertura/chiusura
+         della now playing sheet per farla ingrandire/rimpicciolire in modo fluido dalla sua
+         posizione nel miniplayer a quella nella sheet (e viceversa), seguendo il dito durante
+         lo swipe esattamente come il resto della sheet. Vedi updateHeroArtwork() più sotto. -->
+    <div id="heroArtwork" style="position:fixed; border-radius:50%; overflow:hidden; z-index:150; pointer-events:none; opacity:0; will-change:transform; transform-origin:0 0;">
+        <img id="heroArtworkImg" class="w-full h-full object-cover" alt="" draggable="false">
+    </div>
+
     <!-- Now Playing Sheet -->
     <div id="nowPlayingSheet" class="flex flex-col select-none custom-bg-main">
 
@@ -1084,7 +1099,7 @@
             </div>
 
             <!-- Area Controlli Inferiore -->
-            <div class="w-full max-w-sm mx-auto shrink-0 pointer-events-auto">
+            <div id="sheetBottomControls" class="w-full max-w-sm mx-auto shrink-0 pointer-events-auto">
                 <div class="w-full text-left mb-5">
                     <div id="swipeTitleContainer" class="w-full py-1 cursor-grab active:cursor-grabbing select-none" style="touch-action: none;">
                         <div class="marquee-wrapper">
@@ -1330,6 +1345,131 @@
             const translateYpx = values[5] || 0;
             const height = nowPlayingSheet.offsetHeight || window.innerHeight;
             return (translateYpx / height) * 100;
+        }
+
+        // ============================================================
+        // HERO ARTWORK: morph fluido della copertina tra miniplayer e now playing sheet
+        // ------------------------------------------------------------
+        // Idea: invece di far comparire/sparire due immagini diverse, usiamo #heroArtwork
+        // come "controfigura" volante che si sovrappone esattamente alla copertina reale
+        // (piccola nel miniplayer o grande nella sheet) e la anima in mezzo, con
+        // transform (translate + scale) così è tutto compositing GPU, nessun reflow.
+        // Il "progress" (0 = chiuso, 1 = aperto) viene letto ogni frame direttamente dalla
+        // posizione REALE della sheet (getSheetCurrentPercentY), la stessa identica fonte già
+        // usata per il drag: funziona quindi automaticamente sia durante uno swipe manuale
+        // (transform impostato a mano ad ogni touchmove) sia durante la transizione CSS
+        // animata dal tap su apri/chiudi, senza bisogno di due logiche separate.
+        const heroArtworkEl = document.getElementById('heroArtwork');
+        const heroArtworkImgEl = document.getElementById('heroArtworkImg');
+        const sheetBottomControlsEl = document.getElementById('sheetBottomControls');
+        const sheetHeaderDragEl = document.getElementById('sheetHeaderDrag');
+        let heroRects = null; // { mini:{left,top,width,height}, open:{left,top,width,height} }
+        let heroRafId = null;
+
+        function lerp(a, b, t) { return a + (b - a) * t; }
+        function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+        // Fa iniziare/finire un fade prima/dopo certe soglie di progress, invece che in modo
+        // lineare su tutto il gesto: è quello che dà l'effetto "i controlli compaiono dopo"
+        // visto nel video di riferimento, invece di un semplice dissolvenza 1:1 con lo swipe.
+        function smoothstep(edge0, edge1, x) {
+            const t = clamp01((x - edge0) / (edge1 - edge0));
+            return t * t * (3 - 2 * t);
+        }
+
+        // Misura le due posizioni di partenza/arrivo. Va richiamata a inizio di OGNI gesto
+        // (apertura/chiusura, sia a tap che a swipe) perché mini e sheet possono cambiare
+        // rect tra un'apertura e l'altra (rotazione schermo, resize, ecc.).
+        function measureHeroRects() {
+            const miniImg = document.getElementById('miniPlayerImg');
+            if (!miniImg || !sheetArtworkFrameEl) return null;
+            const miniR = miniImg.getBoundingClientRect();
+            if (miniR.width === 0 || miniR.height === 0) return null; // miniplayer non visibile: niente hero
+
+            // Il rect "grezzo" dell'artwork nella sheet riflette il transform ATTUALE della
+            // sheet (che potrebbe essere a metà gesto): lo riportiamo alla posizione che
+            // avrebbe a sheet COMPLETAMENTE aperta, sottraendo l'offset verticale corrente.
+            const rawR = sheetArtworkFrameEl.getBoundingClientRect();
+            const currentPercent = getSheetCurrentPercentY(); // 0 chiusa .. -100 aperta
+            const sheetH = nowPlayingSheet.offsetHeight || window.innerHeight;
+            const currentTranslatePx = (currentPercent / 100) * sheetH;
+            const openTop = rawR.top - currentTranslatePx;
+
+            return {
+                mini: { left: miniR.left, top: miniR.top, width: miniR.width, height: miniR.height },
+                open: { left: rawR.left, top: openTop, width: rawR.width, height: rawR.height }
+            };
+        }
+
+        function updateHeroArtwork(progress) {
+            if (!heroRects) return;
+            const p = clamp01(progress);
+            const r0 = heroRects.mini, r1 = heroRects.open;
+
+            // Dimensione/posizione di base del clone = stato "aperto" (r1), poi lo animiamo
+            // verso r0 con un transform: a p=1 transform è identità (combacia col vero
+            // artwork della sheet), a p=0 combacia col vero artwork del miniplayer.
+            const scale = lerp(r0.width / r1.width, 1, p);
+            const cx0 = r0.left + r0.width / 2, cy0 = r0.top + r0.height / 2;
+            const cx1 = r1.left + r1.width / 2, cy1 = r1.top + r1.height / 2;
+            const cx = lerp(cx0, cx1, p), cy = lerp(cy0, cy1, p);
+
+            heroArtworkEl.style.width = r1.width + 'px';
+            heroArtworkEl.style.height = r1.height + 'px';
+            heroArtworkEl.style.left = r1.left + 'px';
+            heroArtworkEl.style.top = r1.top + 'px';
+            heroArtworkEl.style.transform =
+                `translate3d(${cx - cx1}px, ${cy - cy1}px, 0) scale(${scale})`;
+
+            // Nasconde gli originali (miniplayer / sheet) mentre il clone li sta sostituendo
+            // visivamente, per evitare doppioni; li rilascia (stile inline vuoto) appena il
+            // clone stesso sparisce, cosi non interferiscono con le loro normali transizioni
+            // (fade al caricamento immagine, vinile che ruota, ecc.).
+            document.getElementById('miniPlayerImg').style.opacity = p > 0.01 ? '0' : '';
+            sheetArtworkFrameEl.style.opacity = p < 0.99 ? '0' : '';
+
+            // Controlli e header della sheet: comparsa scaglionata (fade + leggero slide),
+            // non 1:1 con lo swipe, per dare l'impressione che "si aprano" dopo l'artwork.
+            if (sheetBottomControlsEl) {
+                const cp = smoothstep(0.35, 0.9, p);
+                sheetBottomControlsEl.style.opacity = cp;
+                sheetBottomControlsEl.style.transform = `translate3d(0, ${lerp(16, 0, cp)}px, 0)`;
+            }
+            if (sheetHeaderDragEl) {
+                const hp = smoothstep(0.15, 0.65, p);
+                sheetHeaderDragEl.style.opacity = hp;
+            }
+        }
+
+        function releaseHeroOverrides() {
+            document.getElementById('miniPlayerImg').style.opacity = '';
+            if (sheetArtworkFrameEl) sheetArtworkFrameEl.style.opacity = '';
+            if (sheetBottomControlsEl) { sheetBottomControlsEl.style.opacity = ''; sheetBottomControlsEl.style.transform = ''; }
+            if (sheetHeaderDragEl) sheetHeaderDragEl.style.opacity = '';
+            heroArtworkEl.style.opacity = '0';
+        }
+
+        // Avvia (o riusa già in corso) il loop che ad ogni frame legge la posizione REALE
+        // della sheet e anima il clone di conseguenza. Va richiamata a inizio gesto (tap o
+        // swipe, apertura o chiusura): funziona da sola finché il progress non si assesta
+        // a uno dei due estremi (0 o 1), poi si ferma da sola e ripristina tutto.
+        function startHeroLoop() {
+            heroRects = measureHeroRects();
+            if (!heroRects) return;
+            heroArtworkImgEl.src = sheetArtworkImgEl ? sheetArtworkImgEl.src : '';
+            heroArtworkEl.style.opacity = '1';
+            if (heroRafId) return; // loop già attivo, si auto-aggiorna da solo
+            const tick = () => {
+                const percent = getSheetCurrentPercentY();
+                const progress = clamp01(-percent / 100);
+                updateHeroArtwork(progress);
+                if (progress > 0.001 && progress < 0.999) {
+                    heroRafId = requestAnimationFrame(tick);
+                } else {
+                    heroRafId = null;
+                    releaseHeroOverrides();
+                }
+            };
+            heroRafId = requestAnimationFrame(tick);
         }
 
         if ('serviceWorker' in navigator) {
@@ -1902,6 +2042,7 @@
             nowPlayingSheet.style.transition = 'transform 0.38s cubic-bezier(0.22, 1, 0.36, 1)';
             nowPlayingSheet.classList.add('expanded');
             nowPlayingSheet.style.transform = '';
+            startHeroLoop();
             // La History API è gestita in modo indipendente dall'animazione: se lo stato "sheet"
             // è già in cima allo stack non lo duplichiamo, per evitare che tap ravvicinati
             // desincronizzino pushState/back e blocchino il gesto successivo.
@@ -1927,6 +2068,7 @@
             nowPlayingSheet.style.transform = `translate3d(0, ${startPercent}%, 0)`;
             void nowPlayingSheet.offsetHeight;
             nowPlayingSheet.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+            startHeroLoop();
             // La rimozione vera e propria della classe 'expanded' viene lasciata al
             // gestore di popstate qui sotto (che la fa già): se la rimuovessimo già ora,
             // quando popstate scatta (sempre, anche per una chiusura "manuale" via
@@ -2069,6 +2211,7 @@
                 // arriva a metà di un'animazione precedente non ancora terminata.
                 basePercent = getSheetCurrentPercentY();
                 nowPlayingSheet.style.transition = 'none';
+                startHeroLoop();
             };
 
             const onMove = (y) => {
@@ -2146,6 +2289,7 @@
                 // così il gesto resta sotto controllo anche subito dopo un'altra animazione.
                 miniDragBasePercent = getSheetCurrentPercentY();
                 miniTextContainer.classList.add('dragging-active');
+                startHeroLoop();
             };
             // Il testo scorre solo per un breve tratto (mai fino a sovrapporre thumbnail o pulsante play)
             // e la dissolvenza si completa esattamente quando raggiunge quel limite: niente più
