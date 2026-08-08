@@ -633,13 +633,13 @@
             --bg-card: rgba(150, 172, 196, 0.20);
             --bg-input: rgba(150, 172, 196, 0.14);
             --accent: #8B2FD9;
-            /* Highlight dedicato per il titolo/badge della traccia in riproduzione:
-               il viola di --accent (usato anche per play/progress bar) sparisce
-               contro questo sfondo blu-teal — troppo vicino come tinta e luminosità.
-               Un ambra caldo è il complementare del blu di sfondo: massimo contrasto
-               percettivo, resta leggibile senza sembrare un errore di palette (stessa
-               famiglia calda dell'arancio --accent originale della skin "Moderna"). */
-            --frosted-highlight: #FFB454;
+            /* Highlight dedicato per il titolo/badge della traccia in riproduzione (e per
+               il ring del "recente" più in basso): il viola di --accent (usato anche per
+               play/progress bar, #8B2FD9) è troppo scuro/saturo e sparisce contro questo
+               sfondo blu-teal. Resto nella stessa famiglia blu/viola richiesta, ma molto
+               più chiaro e freddo — un indaco-violetto luminoso che si stacca nettamente
+               sia dal teal (#4F84A0) che dall'indaco più cupo dello sfondo. */
+            --frosted-highlight: #A78BFA;
             --text-main: #F5F7FA;
             --text-muted: #C7D0DE;
             /* Tono "vetro frosted" dei pulsanti tondi (avanti/indietro + anello del
@@ -650,26 +650,43 @@
                ottenere lo stesso effetto invece di lasciar trasparire troppo lo sfondo. */
             --frosted-btn: rgba(196, 210, 222, 0.94);
         }
-        /* Tutte le artwork diventano cerchi con un sottile bordo chiaro "a vetro":
+        /* Tutte le artwork diventano cerchi con un bordo chiaro "a vetro" ben visibile:
            card Recenti in home, playlist recenti nel menu Impostazioni, miniplayer,
-           now playing e lista brani. */
+           now playing. Bordo reso più spesso/luminoso (era 2px @ 35%, troppo debole —
+           si perdeva contro lo sfondo scuro). */
         html.frosted .qcard .circle,
         html.frosted .settings-playlist-thumb,
-        html.frosted #miniPlayerImg,
-        html.frosted .track-thumb-img {
+        html.frosted #miniPlayerImg {
             border-radius: 50% !important;
-            border: 2px solid rgba(255,255,255,0.35);
+            border: 2.5px solid rgba(255,255,255,0.55);
         }
         html.frosted #sheetArtworkImg {
             border-radius: 50% !important;
-            border: 4px solid rgba(255,255,255,0.32);
+            border: 4px solid rgba(255,255,255,0.5);
         }
         html.frosted #sheetArtworkGlow { border-radius: 50% !important; }
-        html.frosted .track-thumb-wrap { border-radius: 50% !important; }
-        html.frosted .qcard.latest .circle { box-shadow: 0 0 0 3px var(--accent); border-color: transparent; }
 
-        /* ---- Highlight ambra nella lista (titolo + badge della traccia in riproduzione) ----
-           Non tocco --accent (resta il viola di pulsanti/progress bar), l'ambra compare
+        /* ---- Artwork mini nella lista canzoni: il bordo va sul CONTENITORE (.track-thumb-wrap),
+           non sull'<img> al suo interno. Prima il bordo era sull'immagine mentre il contenitore
+           restava con lo sfondo di fallback grigio scuro (bg-neutral-800 di Tailwind, ~rgb(38,38,38)):
+           quel grigio trapelava sotto il bordo semi-trasparente ed è quel "grigio scuro" segnalato
+           invece del vetro chiaro. Spostando bordo + uno sfondo di fallback chiaro sul contenitore
+           l'anello resta pulito qualunque sia lo stato di caricamento della copertina. */
+        html.frosted .track-thumb-wrap {
+            border-radius: 50% !important;
+            background-color: rgba(190, 208, 228, 0.22);
+            border: 2.5px solid rgba(255,255,255,0.55);
+        }
+        html.frosted .track-thumb-img { border-radius: 50% !important; }
+
+        /* ---- Ring del brano/ricerca più recente ("latest"): usava --accent (viola scuro),
+           stesso problema di contrasto del titolo in riproduzione. Stessa correzione: il nuovo
+           indaco-violetto chiaro al posto del viola cupo. */
+        html.frosted .qcard.latest .circle { box-shadow: 0 0 0 3px var(--frosted-highlight); border-color: transparent; }
+        html.frosted .qcard.latest .name { color: var(--frosted-highlight); }
+
+        /* ---- Highlight indaco-violetto nella lista (titolo + badge della traccia in riproduzione) ----
+           Non tocco --accent (resta il viola di pulsanti/progress bar), il nuovo colore compare
            solo qui dove il viola perdeva leggibilità sullo sfondo blu-teal. */
         html.frosted .track-row.playing .custom-text-accent { color: var(--frosted-highlight) !important; }
         html.frosted .track-playing-badge { color: var(--frosted-highlight) !important; }
@@ -744,6 +761,11 @@
             color: #fff !important;
         }
         html.frosted .theme-opt.active { color: #fff; }
+        /* Pillola del tab "Frosted" nel selettore: ereditava var(--accent) (viola) come
+           le altre skin, ma qui vogliamo l'azzurro scuro caratteristico di questa skin —
+           lo stesso blu-notte già usato per la status bar (#0A2F5C) — con il testo bianco
+           sopra (già impostato dalla regola qui sopra) che ci contrasta molto bene. */
+        html.frosted .theme-select-thumb { background: #0A2F5C; }
 
         /* ================= Selettore Tema (Moderna / Walkman) ================= */
         .theme-select-row .lbl { font-size:13px; font-weight:600; color:var(--text-main); }
