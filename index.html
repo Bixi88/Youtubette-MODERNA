@@ -642,12 +642,11 @@
             --text-main: #F5F7FA;
             --text-muted: #C7D0DE;
             /* Tono "vetro frosted" dei pulsanti tondi (avanti/indietro + anello del
-               play/pausa): stesso azzurro-lavanda chiaro campionato dai pixel del
-               pulsante nella foto (~rgb(166,184,197)). Reso QUASI OPACO (non un
-               semplice overlay trasparente al 50%): nella foto l'anello è pulito, non
-               "sporcato" dal colore dello sfondo sotto — serve alta opacità per
-               ottenere lo stesso effetto invece di lasciar trasparire troppo lo sfondo. */
-            --frosted-btn: rgba(196, 210, 222, 0.94);
+               play/pausa) e dell'anello sottile attorno all'artwork: colore campionato
+               pixel per pixel dalla foto di riferimento (~rgb(178,188,198), quasi
+               opaco — il valore resta pressoché costante indipendentemente da cosa c'è
+               dietro, segno che non è un overlay trasparente ma un riempimento pieno). */
+            --frosted-btn: rgba(178, 188, 198, 0.95);
         }
         /* Tutte le artwork diventano cerchi con un bordo chiaro "a vetro" ben visibile:
            card Recenti in home, playlist recenti nel menu Impostazioni, miniplayer,
@@ -659,11 +658,23 @@
             border-radius: 50% !important;
             border: 2.5px solid rgba(255,255,255,0.55);
         }
+        /* Cornice doppia attorno all'artwork della Now Playing, come da foto di
+           riferimento: NESSUNA ombra dietro il cerchio (il cerchio si fonde nello
+           sfondo), solo un anello a due strati — sottile e più luminoso all'esterno
+           (il border), più largo e tenue subito dentro (il padding, riempito da un
+           velo bianco quasi trasparente). Misure e colori presi campionando i pixel
+           della foto: l'anello sottile è quasi opaco (stesso tono dei pulsanti,
+           var(--frosted-btn)), la fascia larga interna è un overlay bianco ~12%. */
         html.frosted #sheetArtworkFrame {
             border-radius: 50% !important;
-            border: 4px solid rgba(255,255,255,0.5);
+            box-shadow: none !important;
+            padding: 11px;
+            background: rgba(255,255,255,0.12);
+            border: 2.5px solid var(--frosted-btn);
         }
-        html.frosted #sheetArtworkGlow { border-radius: 50% !important; }
+        /* L'alone colorato dietro l'artwork non compare nella foto di riferimento:
+           va spento come già accade per Walkman, non solo reso circolare. */
+        html.frosted #sheetArtworkGlow { display: none; }
 
         /* ---- Artwork mini nella lista canzoni: il bordo va sul CONTENITORE (.track-thumb-wrap),
            non sull'<img> al suo interno. Prima il bordo era sull'immagine mentre il contenitore
@@ -743,7 +754,7 @@
            della foto (non a occhio). */
         html.frosted #playPauseBtn,
         html.frosted #miniPlayPauseBtn {
-            background: linear-gradient(135deg, #8534DD 0%, #A621CE 55%, #BE18CC 100%) !important;
+            background: linear-gradient(135deg, #7B21CD 0%, #9B1DC4 50%, #B512B1 100%) !important;
             border: 3px solid var(--frosted-btn);
             box-shadow: 0 10px 26px -6px rgba(139,47,217,0.55), inset 0 1px 1px rgba(255,255,255,0.35) !important;
         }
