@@ -714,6 +714,28 @@
             background: rgba(255,255,255,0.18);
             border: 1px solid rgba(255,255,255,0.25);
         }
+        /* Titolo playlist in cima alla lista canzoni: stesso indaco-violetto chiaro
+           usato per il brano in riproduzione, invece del bianco piatto di default. */
+        html.frosted .results-header .rt { color: var(--frosted-highlight); }
+
+        /* ---- Pillola di ricerca: resta bianca (come da richiesta), ma icone/testo
+           passano dal grigio caldo neutro di "Moderna" (pensato per quella palette)
+           a un blu-ardesia scuro coerente con l'identità Frosted; lo stato attivo del
+           filtro usa --accent (viola scuro, già il colore-firma di questa skin) al
+           posto dell'ambra ereditato da Moderna, che qui non c'entrava nulla. */
+        html.frosted .search-pill .mag-btn,
+        html.frosted .search-pill .filter-btn {
+            color: #3E5A75 !important;
+        }
+        html.frosted .search-pill .filter-btn.active {
+            color: var(--accent) !important;
+        }
+        html.frosted #searchInput {
+            color: #22364A !important;
+        }
+        html.frosted #searchInput::placeholder {
+            color: #7C90A6 !important;
+        }
         /* Pulsanti play/pausa: nella foto NON è un viola piatto, ma un gradiente
            diagonale viola-blu (alto-sinistra, ~rgb(133,46,219)) verso magenta-viola
            (basso-destra, ~rgb(183,23,206)), racchiuso da un anello "frosted" dello
@@ -747,6 +769,19 @@
             color: #fff !important;
             display: flex; align-items: center; justify-content: center; font-size: 15px;
         }
+        /* Pulsante download nell'header "In Riproduzione": era rimasto sullo stile
+           "piatto" (solo icona, colore --accent) mentre avanti/indietro sono diventati
+           cerchi in vetro frosted — disallineato dal resto dei controlli. Stesso
+           trattamento identico: stesso sfondo/bordo dei pulsanti avanti/indietro,
+           icona bianca piena invece del viola di --accent. Resta disabilitato/appannato
+           (opacity-30 già in classe HTML), qui sistemo solo colori e forma. */
+        html.frosted #sheetDownloadBtn {
+            background: var(--frosted-btn);
+            border: 1px solid rgba(255,255,255,0.35);
+            border-radius: 50%;
+            color: #fff !important;
+        }
+        html.frosted #sheetDownloadBtn i { color: #fff !important; }
         /* Barra del minutaggio: binario in vetro chiaro, riempimento viola acceso. */
         html.frosted #progressBarContainer > div:first-child,
         html.frosted #miniProgressBarContainer > div:first-child {
@@ -760,12 +795,12 @@
             background: var(--accent) !important;
             color: #fff !important;
         }
-        html.frosted .theme-opt.active { color: #fff; }
-        /* Pillola del tab "Frosted" nel selettore: ereditava var(--accent) (viola) come
-           le altre skin, ma qui vogliamo l'azzurro scuro caratteristico di questa skin —
-           lo stesso blu-notte già usato per la status bar (#0A2F5C) — con il testo bianco
-           sopra (già impostato dalla regola qui sopra) che ci contrasta molto bene. */
-        html.frosted .theme-select-thumb { background: #0A2F5C; }
+        html.frosted .theme-opt.active { color: var(--frosted-highlight); }
+        /* Pillola del tab "Frosted" nel selettore: il blu-notte scuro (#0A2F5C) non
+           piaceva — sostituito con l'azzurro chiaro dello sfondo stesso (lo stesso
+           teal di --bg-gradient-top), con dentro il testo nell'indaco-violetto
+           dell'highlight invece del bianco. */
+        html.frosted .theme-select-thumb { background: var(--bg-gradient-top); }
 
         /* ================= Selettore Tema (Moderna / Walkman) ================= */
         .theme-select-row .lbl { font-size:13px; font-weight:600; color:var(--text-main); }
