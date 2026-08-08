@@ -608,17 +608,31 @@
            satinato, accento viola acceso, artwork tutte rotonde.
            ================================================================ */
         html.frosted {
-            --bg-main: #050F2A;
-            --bg-gradient-top: #0A4A70;
-            /* Gradiente diagonale blu-petrolio -> navy scuro, al posto delle 4 fasce
-               verticali viola/nero di "Moderna": qui riscriviamo l'intera variabile
-               --bg-gradient (non solo main/top), che html,body usa già direttamente. */
-            --bg-gradient: linear-gradient(150deg, #0D5F8C 0%, #0A2F5C 45%, #050F2A 100%);
+            --bg-main: #030A1F;
+            --bg-gradient-top: #0E5C87;
+            /* Sfondo reale della foto: NON è un semplice gradiente lineare a due colori,
+               ma un blu-navy scuro (più cupo in basso a sinistra) con due "aloni" teal
+               concentrati sul bordo destro (in alto e in basso), tipico effetto di uno
+               sfondo molto sfocato (blur pesante) dietro il vetro satinato. Campionato
+               pixel per pixel dalla foto: angolo in basso a sinistra ~#051443 (il più
+               scuro), angoli destri ~#074266/#08496C (i più chiari, teal). Ricreato con
+               due radial-gradient (gli aloni) sopra una base lineare scura.
+               --bg-gradient viene riscritta per intero (non solo main/top), dato che
+               html,body la usa già direttamente via background: var(--bg-gradient). */
+            --bg-gradient:
+                radial-gradient(85% 65% at 100% 0%, #0E5C87 0%, rgba(14,92,135,0) 70%),
+                radial-gradient(85% 65% at 100% 100%, #0E7093 0%, rgba(14,112,147,0) 70%),
+                linear-gradient(200deg, #123A5E 0%, #071B3E 45%, #030A1F 100%);
             --bg-card: rgba(140, 168, 198, 0.22);
             --bg-input: rgba(140, 168, 198, 0.16);
             --accent: #8B2FD9;
             --text-main: #F5F7FA;
             --text-muted: #B9C4D6;
+            /* Tono "vetro frosted" dei pulsanti tondi (avanti/indietro + anello del
+               play/pausa): stesso azzurro-lavanda chiaro campionato dai pixel del
+               pulsante nella foto (~rgb(166,184,197)), non il bianco/grigio generico
+               usato altrove nell'app. */
+            --frosted-btn: rgba(200, 214, 226, 0.55);
         }
         /* Tutte le artwork diventano cerchi con un sottile bordo chiaro "a vetro":
            card Recenti in home, playlist recenti nel menu Impostazioni, miniplayer,
@@ -661,23 +675,37 @@
             background: rgba(255,255,255,0.18);
             border: 1px solid rgba(255,255,255,0.25);
         }
-        /* Pulsanti play/pausa: cerchio viola pieno con icona bianca (invece del
-           testo scuro #1a1305 pensato per l'accento arancione di "Moderna"). */
+        /* Pulsanti play/pausa: nella foto NON è un viola piatto, ma un gradiente
+           diagonale viola-blu (alto-sinistra, ~rgb(133,46,219)) verso magenta-viola
+           (basso-destra, ~rgb(183,23,206)), racchiuso da un anello "frosted" dello
+           stesso vetro chiaro dei pulsanti avanti/indietro — non uno sfondo pieno
+           col solo bordo dell'icona bianca. Valori presi campionando i pixel reali
+           della foto (non a occhio). */
         html.frosted #playPauseBtn,
         html.frosted #miniPlayPauseBtn {
-            background: var(--accent) !important;
-            box-shadow: 0 10px 26px -8px rgba(139,47,217,0.65) !important;
+            background: linear-gradient(135deg, #8534DD 0%, #A621CE 55%, #BE18CC 100%) !important;
+            border: 3px solid var(--frosted-btn);
+            box-shadow: 0 10px 26px -6px rgba(139,47,217,0.55), inset 0 1px 1px rgba(255,255,255,0.35) !important;
         }
         html.frosted #playPauseBtn i,
         html.frosted #miniPlayPauseBtn i {
             color: #fff !important;
         }
-        /* Avanti/indietro: piccoli cerchi in vetro chiaro, come nel riferimento. */
+        /* Il mini player è molto più piccolo (38px vs 68px): un bordo di 3px come nel
+           pulsante grande risulterebbe sproporzionato, quindi qui più sottile. */
+        html.frosted #miniPlayPauseBtn {
+            border-width: 2px;
+        }
+        /* Avanti/indietro: cerchio in vetro satinato chiaro (stesso tono dell'anello
+           del play/pausa), con un lieve rilievo "a goccia di vetro" — più chiaro in
+           alto a sinistra, più scuro in basso a destra — come nella foto, invece di
+           un riempimento piatto uniforme. */
         html.frosted #prevBtn, html.frosted #nextBtn {
             width: 46px; height: 46px; padding: 0; border-radius: 50%;
-            background: rgba(255,255,255,0.22);
-            border: 1px solid rgba(255,255,255,0.3);
-            color: var(--text-main) !important;
+            background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.7) 0%, var(--frosted-btn) 55%, rgba(150,168,184,0.55) 100%);
+            border: 1px solid rgba(255,255,255,0.4);
+            box-shadow: 0 4px 10px -3px rgba(0,0,0,0.35);
+            color: #fff !important;
             display: flex; align-items: center; justify-content: center; font-size: 15px;
         }
         /* Barra del minutaggio: binario in vetro chiaro, riempimento viola acceso. */
