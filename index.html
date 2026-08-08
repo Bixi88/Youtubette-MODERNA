@@ -440,7 +440,6 @@
         .qcard .circle { width:100%; aspect-ratio:1/1; border-radius:22%; background-size:cover; background-position:center; background-color:var(--bg-input); position:relative; box-shadow:0 10px 22px -8px rgba(0,0,0,.5); }
         .qcard.latest .circle { box-shadow:0 0 0 3px var(--accent), 0 10px 22px -8px rgba(0,0,0,.5); }
         .qcard.latest .name { color:var(--accent); }
-        .qcard .circle .badge { position:absolute; bottom:5px; right:5px; width:18px; height:18px; border-radius:50%; background:rgba(13,12,16,.75); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; font-size:8.5px; color:var(--text-main); }
         .qcard .name { font-size:12.5px; font-weight:600; text-align:center; line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--text-main); }
         .qcard .qcard-delete {
             position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; border-radius: 50%;
@@ -999,9 +998,12 @@
                     <button id="closeSheetBtn" class="text-neutral-300 hover:text-white p-2 text-[19px] active:scale-90 transition-transform">
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
-                    <span class="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-300">In Riproduzione</span>
+                    <div id="sheetHeaderCenter" class="flex flex-col items-center justify-center flex-1 min-w-0 px-2 pointer-events-auto">
+                        <span id="sheetHeaderEyebrow" class="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-300 truncate max-w-full">In Riproduzione</span>
+                        <span id="sheetHeaderPlaylistName" class="hidden text-[13px] font-bold text-white truncate max-w-[200px] mt-0.5"></span>
+                    </div>
                     <button id="sheetDownloadBtn" class="custom-text-accent hover:opacity-80 p-2 text-[14px] opacity-30 cursor-not-allowed active:scale-90 transition-transform" disabled>
-                        <i class="fa-solid fa-arrow-down-long"></i>
+                        <i class="fa-solid fa-download"></i>
                     </button>
                 </div>
             </div>
@@ -1586,6 +1588,7 @@
             document.getElementById('nextBtn').addEventListener('click', nextTrack);
 
             document.getElementById('sheetDownloadBtn').addEventListener('click', redirectToDownload);
+            document.getElementById('sheetHeaderCenter')?.addEventListener('click', openNowPlayingPlaylist);
             document.getElementById('volumeSlider')?.addEventListener('input', (e) => player?.setVolume(e.target.value));
             
             progressBarContainer.addEventListener('mousedown', startScrub);
@@ -2527,6 +2530,7 @@
             nowPlayingListType = saved.listType || null;
             nowPlayingListKey = saved.listKey || null;
             nowPlayingListTitle = saved.listTitle || '';
+            updateNowPlayingHeaderLabel();
 
             const track = restoredTracks[restoredIndex] || saved.track;
 
@@ -2922,7 +2926,6 @@
             grid.innerHTML = items.map((it, i) => `
                 <div class="qcard${i === 0 ? ' latest' : ''}" data-index="${i}">
                     <div class="circle" style="${it.artwork ? `background-image:url('${it.artwork.replace(/'/g, "\\'")}')` : ''}">
-                        <span class="badge"><i class="fa-solid fa-list"></i></span>
                         <button class="qcard-delete" data-index="${i}" title="Rimuovi">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
@@ -3016,6 +3019,66 @@
                 }
                 importSpotifyPlaylist(item.url);
             }
+        }
+
+        // Aggiorna l'etichetta in alto nella Now Playing Sheet: se il brano in ascolto
+        // viene da una playlist Spotify importata, mostra "Riproduzione da Playlist:" +
+        // il nome (stile Spotify) ed è tappabile; per un brano da ricerca YouTube (non
+        // è propriamente una "playlist") resta l'etichetta generica "In Riproduzione",
+        // non cliccabile. Vale per tutte le skin, non solo frosted.
+        function updateNowPlayingHeaderLabel() {
+            const center = document.getElementById('sheetHeaderCenter');
+            const eyebrow = document.getElementById('sheetHeaderEyebrow');
+            const nameEl = document.getElementById('sheetHeaderPlaylistName');
+            if (!center || !eyebrow || !nameEl) return;
+
+            if (nowPlayingListType === 'spotify' && nowPlayingListKey && nowPlayingListTitle) {
+                eyebrow.textContent = 'Riproduzione da Playlist:';
+                nameEl.textContent = nowPlayingListTitle;
+                nameEl.classList.remove('hidden');
+                center.classList.add('cursor-pointer');
+                center.dataset.clickable = 'true';
+            } else {
+                eyebrow.textContent = 'In Riproduzione';
+                nameEl.textContent = '';
+                nameEl.classList.add('hidden');
+                center.classList.remove('cursor-pointer');
+                center.dataset.clickable = 'false';
+            }
+        }
+
+        // Tap sull'etichetta "Riproduzione da Playlist: <nome>": chiude la Now Playing
+        // Sheet (che "scende in basso") e riporta alla lista canzoni della playlist da
+        // cui viene il brano attuale, riusandola dalla memoria se è ancora quella
+        // sfogliata, altrimenti ricaricandola (cache o rete, come un Recente qualsiasi).
+        function openNowPlayingPlaylist() {
+            const center = document.getElementById('sheetHeaderCenter');
+            if (!center || center.dataset.clickable !== 'true') return;
+            if (nowPlayingListType !== 'spotify' || !nowPlayingListKey || !nowPlayingListKey.startsWith('playlist:')) return;
+            const url = nowPlayingListKey.slice('playlist:'.length);
+            const savedKey = nowPlayingListKey;
+
+            const goToPlaylist = () => {
+                if (currentLoadedKey === savedKey && appState.tracks.length > 0) {
+                    currentListSource = 'spotify';
+                    showResultsView(currentLoadedTitle);
+                    renderTracklist(0);
+                    updateRefreshPlaylistBtn(url);
+                } else {
+                    importSpotifyPlaylist(url);
+                }
+            };
+
+            // Se la sheet è aperta tramite history (stato 'sheet'), closeNowPlayingSheet()
+            // fa un history.back() asincrono: aspettiamo che sia davvero completato prima
+            // di fare la nostra pushState('results'), altrimenti i due si scavalcherebbero
+            // lasciando lo stack della cronologia in uno stato incoerente.
+            if (window.history.state && window.history.state.page === 'sheet') {
+                window.addEventListener('popstate', goToPlaylist, { once: true });
+            } else {
+                goToPlaylist();
+            }
+            closeNowPlayingSheet();
         }
 
         async function redirectToDownload() {
@@ -3907,6 +3970,7 @@
                 nowPlayingListKey = currentLoadedKey;
                 nowPlayingListTitle = currentLoadedTitle;
             }
+            updateNowPlayingHeaderLabel();
 
             // Azzeriamo SUBITO barra di avanzamento e tempi: altrimenti resterebbero visibili
             // quelli della canzone uscente per l'istante in cui il player YouTube sta ancora
