@@ -776,7 +776,7 @@
            icona bianca piena invece del viola di --accent. Resta disabilitato/appannato
            (opacity-30 già in classe HTML), qui sistemo solo colori e forma. */
         html.frosted #sheetDownloadBtn {
-            width: 38px; height: 38px;
+            width: 25px; height: 25px;
             display: flex; align-items: center; justify-content: center;
             background: var(--frosted-btn);
             border: 1px solid rgba(255,255,255,0.35);
@@ -1000,8 +1000,8 @@
                         <i class="fa-solid fa-chevron-down"></i>
                     </button>
                     <span class="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-300">In Riproduzione</span>
-                    <button id="sheetDownloadBtn" class="custom-text-accent hover:opacity-80 p-2 text-[21px] opacity-30 cursor-not-allowed active:scale-90 transition-transform" disabled>
-                        <i class="fa-solid fa-arrow-down"></i>
+                    <button id="sheetDownloadBtn" class="custom-text-accent hover:opacity-80 p-2 text-[14px] opacity-30 cursor-not-allowed active:scale-90 transition-transform" disabled>
+                        <i class="fa-solid fa-arrow-down-long"></i>
                     </button>
                 </div>
             </div>
@@ -2510,6 +2510,16 @@
                     currentLoadedTitle = saved.listTitle || query;
                     nextSearchPageToken = cached.nextPageToken || '';
                 }
+            }
+
+            // La vista "Risultati" resta nascosta finché l'utente non ci naviga (swipe o
+            // tasto Recenti), ma il suo contenuto va preparato SUBITO: senza questo, il
+            // primo swipe verso la lista canzoni la trovava vuota (appState.tracks era
+            // valorizzato ma #trackList non era mai stato disegnato).
+            if (appState.tracks.length > 0) {
+                renderTracklist(0);
+                const resultsTitle = document.getElementById('resultsTitle');
+                if (resultsTitle) resultsTitle.textContent = currentLoadedTitle;
             }
 
             nowPlayingTracks = restoredTracks;
