@@ -608,31 +608,33 @@
            satinato, accento viola acceso, artwork tutte rotonde.
            ================================================================ */
         html.frosted {
-            --bg-main: #030A1F;
-            --bg-gradient-top: #0E5C87;
-            /* Sfondo reale della foto: NON è un semplice gradiente lineare a due colori,
-               ma un blu-navy scuro (più cupo in basso a sinistra) con due "aloni" teal
-               concentrati sul bordo destro (in alto e in basso), tipico effetto di uno
-               sfondo molto sfocato (blur pesante) dietro il vetro satinato. Campionato
-               pixel per pixel dalla foto: angolo in basso a sinistra ~#051443 (il più
-               scuro), angoli destri ~#074266/#08496C (i più chiari, teal). Ricreato con
-               due radial-gradient (gli aloni) sopra una base lineare scura.
-               --bg-gradient viene riscritta per intero (non solo main/top), dato che
-               html,body la usa già direttamente via background: var(--bg-gradient). */
+            --bg-main: #4A5875;
+            --bg-gradient-top: #4F84A0;
+            /* CORREZIONE: la prima versione usava i colori del wallpaper ESTERNO alla
+               foto (quello dietro le tre card del mockup) — un blu-navy scuro e saturo.
+               Ma l'app, quando è aperta, riempie tutto lo schermo: corrisponde quindi
+               all'INTERNO di una card (es. "Now Playing"), non allo sfondo esterno.
+               Ricampionando i pixel dentro la card la gamma è tutta diversa: molto più
+               stretta e tenue (il rosso resta quasi fisso ~79-81, cambia solo il
+               blu/verde), dal grigio-indaco più scuro (~rgb(79,90,123)) a un teal
+               tenue più chiaro (~rgb(80,132,155)) — l'effetto vetro sfocato vero, non
+               macchie di colore acceso. Un unico alone morbido (radial-gradient con
+               stop molto larghi) sopra una base quasi piatta, non due "blob" netti. */
             --bg-gradient:
-                radial-gradient(85% 65% at 100% 0%, #0E5C87 0%, rgba(14,92,135,0) 70%),
-                radial-gradient(85% 65% at 100% 100%, #0E7093 0%, rgba(14,112,147,0) 70%),
-                linear-gradient(200deg, #123A5E 0%, #071B3E 45%, #030A1F 100%);
-            --bg-card: rgba(140, 168, 198, 0.22);
-            --bg-input: rgba(140, 168, 198, 0.16);
+                radial-gradient(95% 75% at 66% 40%, #4F84A0 0%, rgba(79,90,123,0) 78%),
+                linear-gradient(165deg, #4F5A7B 0%, #4A5875 100%);
+            --bg-card: rgba(150, 172, 196, 0.20);
+            --bg-input: rgba(150, 172, 196, 0.14);
             --accent: #8B2FD9;
             --text-main: #F5F7FA;
-            --text-muted: #B9C4D6;
+            --text-muted: #C7D0DE;
             /* Tono "vetro frosted" dei pulsanti tondi (avanti/indietro + anello del
                play/pausa): stesso azzurro-lavanda chiaro campionato dai pixel del
-               pulsante nella foto (~rgb(166,184,197)), non il bianco/grigio generico
-               usato altrove nell'app. */
-            --frosted-btn: rgba(200, 214, 226, 0.55);
+               pulsante nella foto (~rgb(166,184,197)). Reso QUASI OPACO (non un
+               semplice overlay trasparente al 50%): nella foto l'anello è pulito, non
+               "sporcato" dal colore dello sfondo sotto — serve alta opacità per
+               ottenere lo stesso effetto invece di lasciar trasparire troppo lo sfondo. */
+            --frosted-btn: rgba(196, 210, 222, 0.94);
         }
         /* Tutte le artwork diventano cerchi con un sottile bordo chiaro "a vetro":
            card Recenti in home, playlist recenti nel menu Impostazioni, miniplayer,
@@ -696,15 +698,15 @@
         html.frosted #miniPlayPauseBtn {
             border-width: 2px;
         }
-        /* Avanti/indietro: cerchio in vetro satinato chiaro (stesso tono dell'anello
-           del play/pausa), con un lieve rilievo "a goccia di vetro" — più chiaro in
-           alto a sinistra, più scuro in basso a destra — come nella foto, invece di
-           un riempimento piatto uniforme. */
+        /* Avanti/indietro: cerchio in vetro satinato chiaro, colore piatto (stesso
+           tono dell'anello del play/pausa), coerente con la foto di riferimento. */
         html.frosted #prevBtn, html.frosted #nextBtn {
             width: 46px; height: 46px; padding: 0; border-radius: 50%;
-            background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.7) 0%, var(--frosted-btn) 55%, rgba(150,168,184,0.55) 100%);
-            border: 1px solid rgba(255,255,255,0.4);
-            box-shadow: 0 4px 10px -3px rgba(0,0,0,0.35);
+            /* Colore piatto (non più radial-gradient con forte rilievo 3D): nella foto
+               il pulsante è quasi uniforme, con al più una variazione di luce minima. */
+            background: var(--frosted-btn);
+            border: 1px solid rgba(255,255,255,0.35);
+            box-shadow: 0 3px 6px -3px rgba(0,0,0,0.25);
             color: #fff !important;
             display: flex; align-items: center; justify-content: center; font-size: 15px;
         }
