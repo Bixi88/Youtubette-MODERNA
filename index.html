@@ -1001,7 +1001,7 @@
                     </button>
                     <span class="text-[11px] font-bold uppercase tracking-[0.14em] text-neutral-300">In Riproduzione</span>
                     <button id="sheetDownloadBtn" class="custom-text-accent hover:opacity-80 p-2 text-[21px] opacity-30 cursor-not-allowed active:scale-90 transition-transform" disabled>
-                        <i class="fa-solid fa-circle-down"></i>
+                        <i class="fa-solid fa-arrow-down"></i>
                     </button>
                 </div>
             </div>
@@ -1323,6 +1323,14 @@
             setupMediaSessionHandlers();
             const ka = document.getElementById('keepAliveAudio');
             if (ka) ka.volume = 0.01; // percettibile solo dal browser, non dall'orecchio
+
+            // Se restoreLastPlayback() era già passata (caso normale: l'iframe API
+            // YouTube è più lenta del DOMContentLoaded) e aveva un brano pronto da
+            // "caricare in pausa", lo facciamo solo ora che il player esiste davvero.
+            if (pendingCueTrackId) {
+                try { player.cueVideoById({ videoId: pendingCueTrackId, suggestedQuality: 'small' }); } catch (err) {}
+                pendingCueTrackId = null;
+            }
         }
 
         // Avvia/ferma l'audio "keep-alive" in sincrono con lo stato reale del player YouTube:
@@ -1410,6 +1418,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             setupFilterDropdowns();
             renderRecentHome();
+            restoreLastPlayback();
 
             document.body.classList.remove('hidden');
             window.history.replaceState({ page: 'main' }, 'Main');
@@ -2433,6 +2442,115 @@
                 }
             });
             if (changed) savePlaylistTracksCache(cache);
+        }
+
+        // --- ULTIMO BRANO ASCOLTATO (ripristino mini-player alla riapertura) ---
+        // Salviamo solo un riferimento leggero (brano + da quale playlist/ricerca
+        // veniva): la lista completa la recuperiamo dalla cache già esistente
+        // (playlist Spotify o ricerca YouTube) quando l'app si riapre, senza doverla
+        // duplicare qui.
+        const LAST_PLAYBACK_KEY = 'youtubette_last_playback';
+
+        function saveLastPlayback(data) {
+            try {
+                localStorage.setItem(LAST_PLAYBACK_KEY, JSON.stringify(data));
+            } catch (err) {
+                console.warn('Impossibile salvare l\'ultimo brano ascoltato:', err);
+            }
+        }
+
+        function loadLastPlayback() {
+            try {
+                const raw = JSON.parse(localStorage.getItem(LAST_PLAYBACK_KEY));
+                return raw && typeof raw === 'object' && raw.track ? raw : null;
+            } catch (err) {
+                return null;
+            }
+        }
+
+        // Video id da caricare (in pausa) nel player YouTube non appena questo sarà
+        // pronto: valorizzato da restoreLastPlayback() se il player non esiste ancora
+        // a quel punto (caso normale, essendo l'iframe API asincrona).
+        let pendingCueTrackId = null;
+
+        // Rimette nel mini-player il brano lasciato in ascolto l'ultima volta, ricostruendo
+        // se possibile anche l'intera playlist/ricerca da cui veniva (già in cache) così
+        // avanti/indietro funzionano subito. Non avvia l'audio: lo "carica in pausa" nel
+        // player (cueVideoById) così un tap su play parte all'istante.
+        function restoreLastPlayback() {
+            const saved = loadLastPlayback();
+            if (!saved) return;
+
+            let restoredTracks = [saved.track];
+            let restoredIndex = 0;
+
+            if (saved.listType === 'spotify' && saved.listKey && saved.listKey.startsWith('playlist:')) {
+                const url = saved.listKey.slice('playlist:'.length);
+                const cached = getCachedPlaylistTracks(url);
+                if (cached && cached.tracks && cached.tracks.length) {
+                    restoredTracks = cached.tracks;
+                    restoredIndex = Math.min(Math.max(saved.index || 0, 0), restoredTracks.length - 1);
+                    appState.tracks = restoredTracks;
+                    appState.currentIndex = restoredIndex;
+                    currentListSource = 'spotify';
+                    currentLoadedKey = saved.listKey;
+                    currentLoadedTitle = saved.listTitle || cached.name || '';
+                    updateRefreshPlaylistBtn(url);
+                }
+            } else if (saved.listType === 'youtube' && saved.listKey && saved.listKey.startsWith('query:')) {
+                const query = saved.listKey.slice('query:'.length);
+                const cached = getCachedSearch(query, appState.filterDate, appState.filterDuration);
+                if (cached && cached.items && cached.items.length) {
+                    restoredTracks = cached.items;
+                    restoredIndex = Math.min(Math.max(saved.index || 0, 0), restoredTracks.length - 1);
+                    appState.tracks = restoredTracks;
+                    appState.currentIndex = restoredIndex;
+                    currentListSource = 'youtube';
+                    currentLoadedKey = saved.listKey;
+                    currentLoadedTitle = saved.listTitle || query;
+                    nextSearchPageToken = cached.nextPageToken || '';
+                }
+            }
+
+            nowPlayingTracks = restoredTracks;
+            nowPlayingIndex = restoredIndex;
+            nowPlayingListType = saved.listType || null;
+            nowPlayingListKey = saved.listKey || null;
+            nowPlayingListTitle = saved.listTitle || '';
+
+            const track = restoredTracks[restoredIndex] || saved.track;
+
+            const titleEl = document.getElementById('playerTrackTitle');
+            const channelEl = document.getElementById('playerTrackChannel');
+            if (titleEl) titleEl.innerText = track.title;
+            if (channelEl) channelEl.innerText = track.channel;
+            const miniChannelEl = document.getElementById('miniPlayerChannel');
+            if (miniChannelEl) miniChannelEl.innerText = track.channel;
+            checkAndApplyMiniMarquee(track.title);
+
+            const sheetImg = document.getElementById('sheetArtworkImg');
+            const miniImg = document.getElementById('miniPlayerImg');
+            if (track.spotifyImport) {
+                const src = track.thumbnail || (track.id ? `https://img.youtube.com/vi/${track.id}/mqdefault.jpg` : '');
+                if (sheetImg) sheetImg.src = src;
+                if (miniImg) miniImg.src = src;
+            } else if (track.id) {
+                displayArtwork(sheetImg, track.id);
+                displayArtwork(miniImg, track.id);
+            }
+
+            if (miniPlayer) miniPlayer.classList.add('visible');
+            toggleDownloadButtons(true);
+            setPlayIconState(false);
+            updateMediaSessionMetadata(track);
+
+            if (track.id) {
+                if (player?.cueVideoById) {
+                    try { player.cueVideoById({ videoId: track.id, suggestedQuality: 'small' }); } catch (err) {}
+                } else {
+                    pendingCueTrackId = track.id;
+                }
+            }
         }
 
         // Mostra il pulsante di aggiornamento manuale nell'header solo quando è aperta una
@@ -3710,6 +3828,13 @@
         // tasto play riprenda semplicemente l'ultimo video rimasto caricato nell'iframe
         // nascosto (il brano precedente), facendolo sentire "sotto" per errore.
         let nowPlayingUnavailable = false;
+        // Da quale lista viene nowPlayingTracks (stessa logica di currentListSource/
+        // currentLoadedKey/currentLoadedTitle ma riferita alla coda in ascolto, non a
+        // quella sfogliata): serve solo per poter salvare "che playlist era" nell'ultimo
+        // brano riprodotto, per il ripristino alla riapertura dell'app.
+        let nowPlayingListType = null;
+        let nowPlayingListKey = null;
+        let nowPlayingListTitle = '';
 
         // sourceTracks: la lista da cui viene il brano da caricare. Di default è la lista
         // attualmente mostrata (appState.tracks, es. quando l'utente tocca una riga), ma
@@ -3767,6 +3892,11 @@
             // questa coda).
             nowPlayingTracks = sourceTracks;
             nowPlayingIndex = index;
+            if (isBrowsingListPlaying) {
+                nowPlayingListType = currentListSource;
+                nowPlayingListKey = currentLoadedKey;
+                nowPlayingListTitle = currentLoadedTitle;
+            }
 
             // Azzeriamo SUBITO barra di avanzamento e tempi: altrimenti resterebbero visibili
             // quelli della canzone uscente per l'istante in cui il player YouTube sta ancora
@@ -3876,6 +4006,17 @@
             // la canzone", più della semplice velocità di rete.
             if (player?.loadVideoById) player.loadVideoById({ videoId: track.id, suggestedQuality: 'small' });
             updateMediaSessionMetadata(track);
+
+            // Ricordiamo il brano e la playlist/ricerca in ascolto: alla prossima apertura
+            // dell'app (anche il giorno dopo) li ritroviamo nel mini-player, pronti per
+            // essere ripresi. Salvato solo qui, a risoluzione dell'id già avvenuta.
+            saveLastPlayback({
+                track: { title: track.title, channel: track.channel, id: track.id || null, thumbnail: track.thumbnail || null, spotifyImport: !!track.spotifyImport },
+                listType: nowPlayingListType,
+                listKey: nowPlayingListKey,
+                listTitle: nowPlayingListTitle,
+                index: index
+            });
         }
 
         function updateMediaSessionMetadata(track) {
