@@ -9,7 +9,7 @@
             var savedTheme = localStorage.getItem('youtubette_theme');
             // Il tema Amoled è stato rimosso: chi lo aveva impostato torna a "Moderna".
             if (savedTheme === 'amoled') savedTheme = 'moderna';
-            if (savedTheme === 'walkman') {
+            if (savedTheme === 'walkman' || savedTheme === 'frosted') {
                 document.documentElement.classList.add(savedTheme);
             }
         } catch (e) {}
@@ -80,6 +80,9 @@
             if (savedTheme === 'walkman') {
                 document.getElementById('metaThemeColor')?.setAttribute('content', '#000000');
                 document.getElementById('metaThemeColorDark')?.setAttribute('content', '#000000');
+            } else if (savedTheme === 'frosted') {
+                document.getElementById('metaThemeColor')?.setAttribute('content', '#0A2F5C');
+                document.getElementById('metaThemeColorDark')?.setAttribute('content', '#0A2F5C');
             }
         } catch (e) {}
     </script>
@@ -600,6 +603,98 @@
            a mano con mask-image usato in precedenza. Il colore è già impostato dalla regola
            "html.walkman #playPauseBtn i / #miniPlayPauseBtn i" più in alto in questo file. */
 
+        /* ================================================================
+           SKIN "FROSTED GLASS": sfondo blu petrolio/notte, pannelli in vetro
+           satinato, accento viola acceso, artwork tutte rotonde.
+           ================================================================ */
+        html.frosted {
+            --bg-main: #050F2A;
+            --bg-gradient-top: #0A4A70;
+            /* Gradiente diagonale blu-petrolio -> navy scuro, al posto delle 4 fasce
+               verticali viola/nero di "Moderna": qui riscriviamo l'intera variabile
+               --bg-gradient (non solo main/top), che html,body usa già direttamente. */
+            --bg-gradient: linear-gradient(150deg, #0D5F8C 0%, #0A2F5C 45%, #050F2A 100%);
+            --bg-card: rgba(140, 168, 198, 0.22);
+            --bg-input: rgba(140, 168, 198, 0.16);
+            --accent: #8B2FD9;
+            --text-main: #F5F7FA;
+            --text-muted: #B9C4D6;
+        }
+        /* Tutte le artwork diventano cerchi con un sottile bordo chiaro "a vetro":
+           card Recenti in home, playlist recenti nel menu Impostazioni, miniplayer,
+           now playing e lista brani. */
+        html.frosted .qcard .circle,
+        html.frosted .settings-playlist-thumb,
+        html.frosted #miniPlayerImg,
+        html.frosted .track-thumb-img {
+            border-radius: 50% !important;
+            border: 2px solid rgba(255,255,255,0.35);
+        }
+        html.frosted #sheetArtworkImg {
+            border-radius: 50% !important;
+            border: 4px solid rgba(255,255,255,0.32);
+        }
+        html.frosted #sheetArtworkGlow { border-radius: 50% !important; }
+        html.frosted .track-thumb-wrap { border-radius: 50% !important; }
+        html.frosted .qcard.latest .circle { box-shadow: 0 0 0 3px var(--accent); border-color: transparent; }
+
+        /* Pannelli in vetro satinato: più saturazione/blur e bordo luminoso, per
+           accentuare l'effetto "frosted" rispetto al blur standard delle altre skin. */
+        html.frosted .glass-panel,
+        html.frosted .settings-sheet,
+        html.frosted .filter-drop,
+        html.frosted .custom-bg-card {
+            backdrop-filter: blur(26px) saturate(150%);
+            -webkit-backdrop-filter: blur(26px) saturate(150%);
+            border-color: rgba(255,255,255,0.28);
+        }
+        /* Il mini player è il pannello più "vetroso" e luminoso di tutti (come nel
+           riferimento): tinta più chiara del resto delle superfici in vetro. */
+        html.frosted #miniPlayer.glass-panel {
+            background: rgba(190, 208, 228, 0.35);
+            border: 1px solid rgba(255,255,255,0.4);
+        }
+        html.frosted .update-btn,
+        html.frosted .results-header .back-btn,
+        html.frosted .results-header .refresh-btn,
+        html.frosted .settings-playlist-remove {
+            background: rgba(255,255,255,0.18);
+            border: 1px solid rgba(255,255,255,0.25);
+        }
+        /* Pulsanti play/pausa: cerchio viola pieno con icona bianca (invece del
+           testo scuro #1a1305 pensato per l'accento arancione di "Moderna"). */
+        html.frosted #playPauseBtn,
+        html.frosted #miniPlayPauseBtn {
+            background: var(--accent) !important;
+            box-shadow: 0 10px 26px -8px rgba(139,47,217,0.65) !important;
+        }
+        html.frosted #playPauseBtn i,
+        html.frosted #miniPlayPauseBtn i {
+            color: #fff !important;
+        }
+        /* Avanti/indietro: piccoli cerchi in vetro chiaro, come nel riferimento. */
+        html.frosted #prevBtn, html.frosted #nextBtn {
+            width: 46px; height: 46px; padding: 0; border-radius: 50%;
+            background: rgba(255,255,255,0.22);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: var(--text-main) !important;
+            display: flex; align-items: center; justify-content: center; font-size: 15px;
+        }
+        /* Barra del minutaggio: binario in vetro chiaro, riempimento viola acceso. */
+        html.frosted #progressBarContainer > div:first-child,
+        html.frosted #miniProgressBarContainer > div:first-child {
+            background: rgba(255,255,255,0.32) !important;
+        }
+        html.frosted #progressBar,
+        html.frosted #miniProgressBar {
+            background-color: var(--accent) !important;
+        }
+        html.frosted #pwaInstallBtn {
+            background: var(--accent) !important;
+            color: #fff !important;
+        }
+        html.frosted .theme-opt.active { color: #fff; }
+
         /* ================= Selettore Tema (Moderna / Walkman) ================= */
         .theme-select-row .lbl { font-size:13px; font-weight:600; color:var(--text-main); }
         .theme-select-row .sub { font-size:11px; color:var(--text-muted); margin-top:2px; margin-bottom:10px; }
@@ -872,6 +967,7 @@
                         <div class="theme-select-thumb" id="themeSelectThumb"></div>
                         <div class="theme-opt" data-theme="moderna" role="tab">Moderna</div>
                         <div class="theme-opt" data-theme="walkman" role="tab">Walkman</div>
+                        <div class="theme-opt" data-theme="frosted" role="tab">Frosted</div>
                     </div>
                 </div>
             </div>
@@ -1499,13 +1595,13 @@
             // --bg-main a nero puro, quindi anche qui deve diventare nero, non restare sul
             // viola/blu di "Moderna" come accadeva prima (nessun aggiornamento a runtime).
             function updateMetaThemeColor(theme) {
-                const color = (theme === 'walkman') ? '#000000' : '#0D0E12';
+                const color = (theme === 'walkman') ? '#000000' : (theme === 'frosted') ? '#0A2F5C' : '#0D0E12';
                 document.getElementById('metaThemeColor')?.setAttribute('content', color);
                 document.getElementById('metaThemeColorDark')?.setAttribute('content', color);
             }
             function setTheme(theme) {
-                if (theme !== 'walkman') theme = 'moderna';
-                document.documentElement.classList.remove('walkman');
+                if (theme !== 'walkman' && theme !== 'frosted') theme = 'moderna';
+                document.documentElement.classList.remove('walkman', 'frosted');
                 if (theme !== 'moderna') document.documentElement.classList.add(theme);
                 applyWalkmanIcons(theme === 'walkman');
                 updateMetaThemeColor(theme);
@@ -1520,6 +1616,7 @@
             if (themeSelectEl) {
                 let currentTheme = 'moderna';
                 if (document.documentElement.classList.contains('walkman')) currentTheme = 'walkman';
+                else if (document.documentElement.classList.contains('frosted')) currentTheme = 'frosted';
                 setTheme(currentTheme);
                 themeOptEls.forEach(opt => {
                     opt.addEventListener('click', () => setTheme(opt.dataset.theme));
