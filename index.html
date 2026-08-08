@@ -992,6 +992,17 @@
                 <p class="text-[10px] mt-1.5 custom-text-muted">Ordine: prima la chiave primaria, poi la secondaria se la prima esaurisce la quota, infine un fallback automatico senza chiave.</p>
             </div>
 
+            <div class="mt-4 border-t border-white/5 pt-4" id="quotaUsageSection">
+                <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted mb-2">Ricerche YouTube rimaste oggi</label>
+                <div id="quotaUsageList" class="flex flex-col gap-2.5"></div>
+                <div class="flex items-center justify-between mt-3 gap-3">
+                    <label for="quotaLimitInput" class="text-[10px] custom-text-muted flex-1 leading-snug">Quota giornaliera per chiave (unità), solo se diversa dal default gratuito di Google</label>
+                    <input type="number" id="quotaLimitInput" min="100" step="100" placeholder="10000"
+                        class="w-20 shrink-0 text-xs px-2 py-1.5 rounded-lg border border-transparent focus:outline-none focus:border-[var(--text-main)] custom-bg-input text-white text-right">
+                </div>
+                <p class="text-[10px] mt-2 custom-text-muted leading-snug">Conteggio esatto delle chiamate fatte da questa app su questo dispositivo (100 unità per ricerca, come da documentazione Google). Si azzera a mezzanotte fuso orario USA Pacifico, le <span id="quotaResetLocalTime">--:--</span> qui. Non vede un eventuale uso della stessa chiave fuori da questa app.</p>
+            </div>
+
             <div class="mt-6 border-t border-white/5 pt-4">
                 <label class="block text-xs font-bold uppercase tracking-wider custom-text-muted mb-2">Playlist Recenti</label>
                 <div id="settingsPlaylistList" class="flex flex-col gap-1.5"></div>
@@ -2410,15 +2421,157 @@
             });
         }
 
+        // --- CONTATORE QUOTA RICERCHE YOUTUBE (esatto, non stimato) ---
+        // La YouTube Data API v3 addebita ESATTAMENTE 100 unità per ogni chiamata
+        // search.list (costo fisso, documentato da Google, non una stima), su una
+        // quota di default di 10.000 unità/giorno per chiave (= 100 ricerche/giorno).
+        // Il reset avviene a mezzanotte fuso orario Pacifico (USA), non a mezzanotte
+        // locale dell'utente. Qui contiamo le chiamate REALMENTE riuscite fatte da
+        // questa app attraverso youtubeSearch() (unico punto che tocca search.list,
+        // sia per la ricerca testuale che per la risoluzione dei brani Spotify): non
+        // è una proiezione, è il conteggio vero delle richieste effettuate.
+        // Limite intrinseco, non aggirabile: se la stessa chiave viene usata anche
+        // fuori da questa app (altro dispositivo, altro progetto), quell'uso non è
+        // visibile qui. Nessuna API key da sola può interrogare Google per la quota
+        // residua "vista dall'esterno" — servirebbe OAuth alla Google Cloud Console,
+        // non disponibile in un'app client-side come questa. Il numero mostrato è
+        // quindi l'uso esatto generato da qui, non una stima del totale assoluto.
+        const YT_SEARCH_QUOTA_COST = 100;
+        const QUOTA_USAGE_KEY = 'youtubette_quota_usage';
+        const QUOTA_LIMIT_KEY = 'youtubette_quota_limit';
+        const DEFAULT_DAILY_QUOTA = 10000;
+
+        // Data odierna nel fuso orario America/Los_Angeles: è quello che Google usa
+        // per il reset giornaliero, non la mezzanotte locale del dispositivo.
+        function getPacificDateStr() {
+            return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+        }
+
+        function loadQuotaUsage() {
+            try {
+                const raw = JSON.parse(localStorage.getItem(QUOTA_USAGE_KEY));
+                return raw && typeof raw === 'object' ? raw : {};
+            } catch (err) {
+                return {};
+            }
+        }
+
+        function saveQuotaUsage(usage) {
+            try {
+                localStorage.setItem(QUOTA_USAGE_KEY, JSON.stringify(usage));
+            } catch (err) {
+                console.warn('Impossibile salvare il contatore quota:', err);
+            }
+        }
+
+        // Registra una chiamata search.list riuscita per una specifica chiave. Se è
+        // cambiato il giorno (fuso Pacifico) rispetto all'ultima chiamata registrata
+        // per quella chiave, il contatore riparte da zero.
+        function recordQuotaUsage(key) {
+            if (!key) return;
+            const usage = loadQuotaUsage();
+            const today = getPacificDateStr();
+            const entry = usage[key];
+            usage[key] = (!entry || entry.date !== today)
+                ? { date: today, used: YT_SEARCH_QUOTA_COST }
+                : { date: today, used: entry.used + YT_SEARCH_QUOTA_COST };
+            saveQuotaUsage(usage);
+            refreshQuotaUsageUI();
+        }
+
+        function getQuotaUsedToday(key) {
+            if (!key) return 0;
+            const entry = loadQuotaUsage()[key];
+            if (!entry || entry.date !== getPacificDateStr()) return 0;
+            return entry.used;
+        }
+
+        function getQuotaDailyLimit() {
+            const raw = parseInt(localStorage.getItem(QUOTA_LIMIT_KEY), 10);
+            return (Number.isFinite(raw) && raw > 0) ? raw : DEFAULT_DAILY_QUOTA;
+        }
+
+        // Se Google stesso risponde "quota esaurita" per una chiave, quell'informazione
+        // è più affidabile del nostro conteggio locale (es. la chiave è stata usata
+        // anche fuori da questa app): allineiamo subito il contatore a "0 rimaste" per
+        // oggi, invece di continuare a mostrare un residuo che sappiamo essere falso.
+        function markQuotaExhausted(key) {
+            if (!key) return;
+            const usage = loadQuotaUsage();
+            usage[key] = { date: getPacificDateStr(), used: getQuotaDailyLimit() };
+            saveQuotaUsage(usage);
+            refreshQuotaUsageUI();
+        }
+
+        // Millisecondi mancanti alla prossima mezzanotte a Los Angeles, calcolati dai
+        // componenti dell'ora corrente in quel fuso (gestisce PST/PDT da solo, senza
+        // dover fare il giro fragile stringa -> Date).
+        function getMsUntilPacificMidnight() {
+            const parts = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/Los_Angeles', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            }).formatToParts(new Date());
+            const get = t => parseInt(parts.find(p => p.type === t)?.value || '0', 10);
+            let h = get('hour'); if (h === 24) h = 0;
+            const elapsedMs = h * 3600000 + get('minute') * 60000 + get('second') * 1000;
+            return (24 * 3600000) - elapsedMs;
+        }
+
+        function getQuotaResetLocalTimeStr() {
+            return new Date(Date.now() + getMsUntilPacificMidnight()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Ridisegna il pannello contatori nelle Impostazioni: chiamata quando si apre
+        // il modal e ogni volta che una nuova chiamata viene registrata (così, se il
+        // modal è già aperto durante una ricerca, il numero si aggiorna da solo).
+        function refreshQuotaUsageUI() {
+            const resetEl = document.getElementById('quotaResetLocalTime');
+            if (resetEl) resetEl.textContent = getQuotaResetLocalTimeStr();
+
+            const list = document.getElementById('quotaUsageList');
+            if (!list) return;
+
+            const limit = getQuotaDailyLimit();
+            const totalSearches = Math.floor(limit / YT_SEARCH_QUOTA_COST);
+            const entries = [
+                { label: 'Chiave primaria', key: appState.apiKey },
+                { label: 'Chiave secondaria', key: appState.apiKey2 },
+            ].filter(e => e.key);
+
+            if (entries.length === 0) {
+                list.innerHTML = '<p class="text-xs custom-text-muted italic">Aggiungi una chiave API per vedere il contatore.</p>';
+                return;
+            }
+
+            list.innerHTML = entries.map(e => {
+                const used = getQuotaUsedToday(e.key);
+                const remaining = Math.max(0, totalSearches - Math.floor(used / YT_SEARCH_QUOTA_COST));
+                const pct = Math.min(100, Math.round((used / limit) * 100));
+                return `
+                    <div class="text-xs">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-semibold text-[var(--text-main)]">${e.label}</span>
+                            <span class="custom-text-muted">${remaining} / ${totalSearches} ricerche rimaste</span>
+                        </div>
+                        <div class="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                            <div class="h-full rounded-full custom-bg-accent" style="width:${pct}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         function openApiModal() {
             const modal = document.getElementById('apiModal');
             const input = document.getElementById('modalApiKeyInput');
             const input2 = document.getElementById('modalApiKeyInput2');
+            const quotaLimitInput = document.getElementById('quotaLimitInput');
             if (modal && input) {
                 input.value = appState.apiKey;
                 if (input2) input2.value = appState.apiKey2;
+                if (quotaLimitInput) quotaLimitInput.value = localStorage.getItem(QUOTA_LIMIT_KEY) || '';
                 modal.classList.add('active');
                 renderSettingsPlaylistList();
+                refreshQuotaUsageUI();
             }
         }
 
@@ -2445,6 +2598,15 @@
             appState.apiKey2 = key2;
             localStorage.setItem('youtubette_api_key', key);
             localStorage.setItem('youtubette_api_key_2', key2);
+
+            const quotaLimitInput = document.getElementById('quotaLimitInput');
+            const quotaLimitVal = parseInt(quotaLimitInput?.value, 10);
+            if (Number.isFinite(quotaLimitVal) && quotaLimitVal > 0) {
+                localStorage.setItem(QUOTA_LIMIT_KEY, String(quotaLimitVal));
+            } else {
+                localStorage.removeItem(QUOTA_LIMIT_KEY);
+            }
+            refreshQuotaUsageUI();
 
             document.getElementById('apiErrorBadge')?.classList.add('hidden');
             document.getElementById('modalApiBadgeError').classList.add('hidden');
@@ -2836,10 +2998,16 @@
                 try {
                     const res = await fetch(buildGoogleApiUrl(key, params));
                     const data = await res.json();
-                    if (!data.error) return data;
+                    if (!data.error) {
+                        // Chiamata riuscita = 100 unità addebitate per certo su questa chiave
+                        // (non una stima): la registriamo subito nel contatore.
+                        recordQuotaUsage(key);
+                        return data;
+                    }
                     console.warn(isQuotaError(data)
                         ? 'Quota YouTube esaurita per una chiave, provo la successiva...'
                         : 'Chiave YouTube non valida o errore API:', data.error.message);
+                    if (isQuotaError(data)) markQuotaExhausted(key);
                 } catch (err) {
                     console.warn('Chiamata alla YouTube API fallita:', err);
                 }
