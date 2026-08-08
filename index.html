@@ -620,12 +620,26 @@
                tenue più chiaro (~rgb(80,132,155)) — l'effetto vetro sfocato vero, non
                macchie di colore acceso. Un unico alone morbido (radial-gradient con
                stop molto larghi) sopra una base quasi piatta, non due "blob" netti. */
+            /* Scurimento centrale (vignette): come nella foto reference, un velo nero
+               morbido concentrato al centro dello schermo — dove cadono i titoli in
+               bianco della lista — che sfuma a zero prima dei bordi. Va PRIMA degli
+               altri due layer (i layer del background si sovrappongono nell'ordine
+               di dichiarazione, il primo è il più in superficie) così scurisce senza
+               spegnere l'alone teal/indaco sotto. */
             --bg-gradient:
+                radial-gradient(70% 55% at 50% 46%, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0) 72%),
                 radial-gradient(95% 75% at 66% 40%, #4F84A0 0%, rgba(79,90,123,0) 78%),
                 linear-gradient(165deg, #4F5A7B 0%, #4A5875 100%);
             --bg-card: rgba(150, 172, 196, 0.20);
             --bg-input: rgba(150, 172, 196, 0.14);
             --accent: #8B2FD9;
+            /* Highlight dedicato per il titolo/badge della traccia in riproduzione:
+               il viola di --accent (usato anche per play/progress bar) sparisce
+               contro questo sfondo blu-teal — troppo vicino come tinta e luminosità.
+               Un ambra caldo è il complementare del blu di sfondo: massimo contrasto
+               percettivo, resta leggibile senza sembrare un errore di palette (stessa
+               famiglia calda dell'arancio --accent originale della skin "Moderna"). */
+            --frosted-highlight: #FFB454;
             --text-main: #F5F7FA;
             --text-muted: #C7D0DE;
             /* Tono "vetro frosted" dei pulsanti tondi (avanti/indietro + anello del
@@ -653,6 +667,12 @@
         html.frosted #sheetArtworkGlow { border-radius: 50% !important; }
         html.frosted .track-thumb-wrap { border-radius: 50% !important; }
         html.frosted .qcard.latest .circle { box-shadow: 0 0 0 3px var(--accent); border-color: transparent; }
+
+        /* ---- Highlight ambra nella lista (titolo + badge della traccia in riproduzione) ----
+           Non tocco --accent (resta il viola di pulsanti/progress bar), l'ambra compare
+           solo qui dove il viola perdeva leggibilità sullo sfondo blu-teal. */
+        html.frosted .track-row.playing .custom-text-accent { color: var(--frosted-highlight) !important; }
+        html.frosted .track-playing-badge { color: var(--frosted-highlight) !important; }
 
         /* Pannelli in vetro satinato: più saturazione/blur e bordo luminoso, per
            accentuare l'effetto "frosted" rispetto al blur standard delle altre skin. */
