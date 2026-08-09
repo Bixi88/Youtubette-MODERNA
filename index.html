@@ -613,6 +613,14 @@
             display: flex; align-items: center; justify-content: center; font-size: 16px;
             background: transparent;
         }
+        /* Repeat acceso in questo tema: --accent qui è il bianco/argento del resto
+           dell'interfaccia, quindi l'icona risultava bianca. Usiamo lo stesso viola
+           "highlight" già riservato in questo tema agli indicatori attivi (barra del
+           minutaggio, brano in riproduzione) al posto di --accent. */
+        html.walkman #repeatBtn.active {
+            color: var(--walkman-highlight) !important;
+            border-color: var(--walkman-highlight);
+        }
         html.walkman #pwaInstallBtn {
             background: transparent !important;
             border: 1px solid var(--text-main);
@@ -1164,7 +1172,7 @@
                 </div>
 
                 <div class="flex items-center justify-center gap-5 mb-8">
-                    <button id="repeatBtn" class="text-gray-400 active:scale-90 transition-colors text-[11px]" title="Ripeti">
+                    <button id="repeatBtn" class="text-gray-400 active:scale-90 transition-colors text-[13px]" title="Ripeti">
                         <i class="fa-solid fa-repeat" id="repeatIcon"></i>
                     </button>
                     <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step" id="prevIcon"></i></button>
