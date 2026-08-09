@@ -842,11 +842,12 @@
         /* Repeat acceso in questo tema: --accent (pensato per il gradiente scuro del
            play/pausa) è troppo simile al blu-grigio di sfondo. Usiamo lo stesso lilla
            "highlight" già riservato in questo tema agli altri indicatori attivi (es.
-           brano in riproduzione) per l'icona. L'outline flat resta quella di
-           --bg-gradient-top di questo tema (l'azzurro-grigio), coerente con le altre skin. */
+           brano in riproduzione) per l'icona. L'outline flat qui usa lo stesso colore
+           della cornice (bordo) dei pulsanti avanti/indietro, non il loro riempimento,
+           per restare coerente con gli altri controlli del tema. */
         html.frosted #repeatBtn.active #repeatIcon {
             color: var(--frosted-highlight) !important;
-            -webkit-text-stroke-color: var(--bg-gradient-top);
+            -webkit-text-stroke-color: rgba(255,255,255,0.35);
         }
         /* Pulsante download nell'header "In Riproduzione": era rimasto sullo stile
            "piatto" (solo icona, colore --accent) mentre avanti/indietro sono diventati
