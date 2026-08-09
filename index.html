@@ -1698,7 +1698,16 @@
             
             window.addEventListener('popstate', (e) => {
                 let handled = false;
-                if (nowPlayingSheet.classList.contains('expanded')) {
+                // Sleep timer sheet: va controllata PRIMA della Now Playing, perché è
+                // "sopra" di essa nello stack degli overlay. Se è aperta, il back deve
+                // chiudere solo lei e lasciare l'utente sulla Now Playing, senza far
+                // scattare anche la chiusura della sheet principale nello stesso evento.
+                const sleepTimerModalEl = document.getElementById('sleepTimerModal');
+                if (sleepTimerModalEl && sleepTimerModalEl.classList.contains('active')) {
+                    sleepTimerModalEl.classList.remove('active');
+                    handled = true;
+                }
+                if (!handled && nowPlayingSheet.classList.contains('expanded')) {
                     nowPlayingSheet.classList.remove('expanded');
                     nowPlayingSheet.style.transform = '';
                     handled = true;
@@ -1861,6 +1870,7 @@
                     cancelSleepTimer();
                 } else {
                     openSleepTimerModal();
+                    window.history.pushState({ page: 'sleepTimer' }, 'SleepTimer');
                 }
             });
             document.querySelectorAll('.sleep-timer-option').forEach((opt) => {
@@ -4572,7 +4582,16 @@
         }
 
         function closeSleepTimerModal() {
-            document.getElementById('sleepTimerModal')?.classList.remove('active');
+            // Come closeApiModal()/closeNowPlayingSheet(): se in cima allo stack c'è lo
+            // stato 'sleepTimer', lasciamo che sia il gestore di popstate a rimuovere la
+            // classe 'active', consumando quello stato con un back invece di rimuoverlo
+            // "a mano". Altrimenti la history resterebbe con uno stato in più e un back
+            // successivo dalla Now Playing salterebbe direttamente alla home.
+            if (window.history.state && window.history.state.page === 'sleepTimer') {
+                window.history.back();
+            } else {
+                document.getElementById('sleepTimerModal')?.classList.remove('active');
+            }
         }
 
         // Spegne un timer già attivo senza passare dal menu: premere di nuovo l'icona quando
