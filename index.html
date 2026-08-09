@@ -840,13 +840,13 @@
             display: flex; align-items: center; justify-content: center; font-size: 15px;
         }
         /* Repeat acceso in questo tema: --accent (pensato per il gradiente scuro del
-           play/pausa) è troppo simile al blu-grigio di sfondo. Usiamo lo stesso lilla
-           "highlight" già riservato in questo tema agli altri indicatori attivi (es.
-           brano in riproduzione) per l'icona. L'outline flat qui usa lo stesso colore
-           della cornice (bordo) dei pulsanti avanti/indietro, non il loro riempimento,
-           per restare coerente con gli altri controlli del tema. */
+           play/pausa) è troppo simile al blu-grigio di sfondo. Invece del lilla chiaro
+           usato altrove, qui usiamo un viola più scuro preso dalla parte più scura del
+           gradiente del pulsante play (#8534DD), per un colore meno "acceso" e più
+           coerente col resto dei controlli. L'outline flat resta il bordo dei pulsanti
+           avanti/indietro, coerente con le altre skin. */
         html.frosted #repeatBtn.active #repeatIcon {
-            color: var(--frosted-highlight) !important;
+            color: #8534DD !important;
             -webkit-text-stroke-color: rgba(255,255,255,0.35);
         }
         /* Pulsante download nell'header "In Riproduzione": era rimasto sullo stile
