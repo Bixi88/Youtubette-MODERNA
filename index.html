@@ -337,18 +337,32 @@
             justify-content: center;
             transition: color 0.2s ease;
         }
-        /* Acceso: colore accento del tema (viola nel tema di default) + uno strato
-           "vetro satinato" che segue esattamente la sagoma dell'icona (non un cerchio):
-           più drop-shadow bianchi sovrapposti, che a differenza di border/box-shadow
-           seguono i pixel della glifo (le doppie frecce), creando un alone frosted
-           intorno al simbolo stesso. */
+        /* Da acceso vogliamo uno strato "vetro satinato" che segua esattamente la sagoma
+           dell'icona (le due frecce), ma piatto e nitido — NON un bagliore sfocato. Niente
+           drop-shadow/blur quindi: usiamo una seconda copia della stessa icona (#repeatIconBg),
+           sovrapposta esattamente al centro e leggermente più grande, tinta di bianco pieno
+           e senza sfocatura. Sporgendo di qualche px oltre i bordi dell'icona colorata sopra,
+           disegna un bordo/sagoma netta che segue il contorno esatto del simbolo, come una
+           "sticker" bicolore invece di un alone.*/
+        #repeatBtn { position: relative; }
+        #repeatIconBg, #repeatIcon {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        #repeatIconBg {
+            color: #fff;
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(1.55);
+            transition: opacity 0.15s ease;
+        }
+        #repeatBtn.active #repeatIconBg {
+            opacity: 1;
+        }
         #repeatBtn.active #repeatIcon {
             color: var(--accent);
-            filter:
-                drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))
-                drop-shadow(0 0 3px rgba(255, 255, 255, 0.65))
-                drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
         }
+
 
         /* --- STILI FILTRI CUSTOM DI RICERCA --- */
         .filter-option {
@@ -616,14 +630,10 @@
         /* Repeat acceso in questo tema: --accent qui è il bianco/argento del resto
            dell'interfaccia, quindi l'icona risultava bianca. Usiamo lo stesso viola
            "highlight" già riservato in questo tema agli indicatori attivi (barra del
-           minutaggio, brano in riproduzione) al posto di --accent, con lo stesso alone
-           frosted che segue la sagoma dell'icona usato nelle altre skin. */
+           minutaggio, brano in riproduzione) al posto di --accent. Lo strato bianco
+           piatto sotto (#repeatIconBg) resta invariato, coerente con le altre skin. */
         html.walkman #repeatBtn.active #repeatIcon {
             color: var(--walkman-highlight) !important;
-            filter:
-                drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))
-                drop-shadow(0 0 3px rgba(255, 255, 255, 0.65))
-                drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
         }
         html.walkman #pwaInstallBtn {
             background: transparent !important;
@@ -840,14 +850,10 @@
         /* Repeat acceso in questo tema: --accent (pensato per il gradiente scuro del
            play/pausa) è troppo simile al blu-grigio di sfondo. Usiamo lo stesso lilla
            "highlight" già riservato in questo tema agli altri indicatori attivi (es.
-           brano in riproduzione) per l'icona, con lo stesso alone frosted bianco che
-           segue la sagoma dell'icona usato nelle altre skin. */
+           brano in riproduzione) per l'icona. Lo strato bianco piatto sotto
+           (#repeatIconBg) resta invariato, coerente con le altre skin. */
         html.frosted #repeatBtn.active #repeatIcon {
             color: var(--frosted-highlight) !important;
-            filter:
-                drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))
-                drop-shadow(0 0 3px rgba(255, 255, 255, 0.65))
-                drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
         }
         /* Pulsante download nell'header "In Riproduzione": era rimasto sullo stile
            "piatto" (solo icona, colore --accent) mentre avanti/indietro sono diventati
@@ -1175,7 +1181,8 @@
                 </div>
 
                 <div class="flex items-center justify-center gap-5 mb-8">
-                    <button id="repeatBtn" class="text-gray-400 active:scale-90 transition-colors text-[13px]" title="Ripeti">
+                    <button id="repeatBtn" class="relative text-gray-400 active:scale-90 transition-colors text-[13px]" title="Ripeti">
+                        <i class="fa-solid fa-repeat" id="repeatIconBg" aria-hidden="true"></i>
                         <i class="fa-solid fa-repeat" id="repeatIcon"></i>
                     </button>
                     <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step" id="prevIcon"></i></button>
