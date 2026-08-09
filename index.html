@@ -337,30 +337,21 @@
             justify-content: center;
             transition: color 0.2s ease;
         }
-        /* Da acceso vogliamo uno strato "vetro satinato" che segua esattamente la sagoma
-           dell'icona (le due frecce), ma piatto e nitido — NON un bagliore sfocato. Niente
-           drop-shadow/blur quindi: usiamo una seconda copia della stessa icona (#repeatIconBg),
-           sovrapposta esattamente al centro e leggermente più grande, tinta di bianco pieno
-           e senza sfocatura. Sporgendo di qualche px oltre i bordi dell'icona colorata sopra,
-           disegna un bordo/sagoma netta che segue il contorno esatto del simbolo, come una
-           "sticker" bicolore invece di un alone.*/
+        /* Da acceso vogliamo una singola icona con un outline netto (non un alone/glow)
+           che segua esattamente il contorno del simbolo, colorato con il colore di sfondo
+           del tema (--bg-gradient-top), così l'icona sembra "ritagliata" sullo sfondo
+           invece di avere un bagliore sfocato. Usiamo -webkit-text-stroke: è un bordo
+           piatto disegnato lungo il contorno del glifo, non uno shadow/blur. */
         #repeatBtn { position: relative; }
-        #repeatIconBg, #repeatIcon {
+        #repeatIcon {
             position: absolute;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
         }
-        #repeatIconBg {
-            color: #fff;
-            opacity: 0;
-            transform: translate(-50%, -50%) scale(1.55);
-            transition: opacity 0.15s ease;
-        }
-        #repeatBtn.active #repeatIconBg {
-            opacity: 1;
-        }
         #repeatBtn.active #repeatIcon {
             color: var(--accent);
+            -webkit-text-stroke: 2.5px var(--bg-gradient-top);
+            paint-order: stroke fill;
         }
 
 
@@ -630,10 +621,11 @@
         /* Repeat acceso in questo tema: --accent qui è il bianco/argento del resto
            dell'interfaccia, quindi l'icona risultava bianca. Usiamo lo stesso viola
            "highlight" già riservato in questo tema agli indicatori attivi (barra del
-           minutaggio, brano in riproduzione) al posto di --accent. Lo strato bianco
-           piatto sotto (#repeatIconBg) resta invariato, coerente con le altre skin. */
+           minutaggio, brano in riproduzione) al posto di --accent. L'outline flat resta
+           quella di --bg-gradient-top di questo tema (nero), coerente con le altre skin. */
         html.walkman #repeatBtn.active #repeatIcon {
             color: var(--walkman-highlight) !important;
+            -webkit-text-stroke-color: var(--bg-gradient-top);
         }
         html.walkman #pwaInstallBtn {
             background: transparent !important;
@@ -850,10 +842,11 @@
         /* Repeat acceso in questo tema: --accent (pensato per il gradiente scuro del
            play/pausa) è troppo simile al blu-grigio di sfondo. Usiamo lo stesso lilla
            "highlight" già riservato in questo tema agli altri indicatori attivi (es.
-           brano in riproduzione) per l'icona. Lo strato bianco piatto sotto
-           (#repeatIconBg) resta invariato, coerente con le altre skin. */
+           brano in riproduzione) per l'icona. L'outline flat resta quella di
+           --bg-gradient-top di questo tema (l'azzurro-grigio), coerente con le altre skin. */
         html.frosted #repeatBtn.active #repeatIcon {
             color: var(--frosted-highlight) !important;
+            -webkit-text-stroke-color: var(--bg-gradient-top);
         }
         /* Pulsante download nell'header "In Riproduzione": era rimasto sullo stile
            "piatto" (solo icona, colore --accent) mentre avanti/indietro sono diventati
@@ -1182,7 +1175,6 @@
 
                 <div class="flex items-center justify-center gap-5 mb-8">
                     <button id="repeatBtn" class="relative text-gray-400 active:scale-90 transition-colors text-[13px]" title="Ripeti">
-                        <i class="fa-solid fa-repeat" id="repeatIconBg" aria-hidden="true"></i>
                         <i class="fa-solid fa-repeat" id="repeatIcon"></i>
                     </button>
                     <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step" id="prevIcon"></i></button>
