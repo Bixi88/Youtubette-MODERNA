@@ -493,6 +493,15 @@
         #apiModal.active .settings-sheet {
             transform: translateX(0);
         }
+        /* Tema Moderna (nessuna classe html dedicata, è il default): il menu impostazioni
+           usa .glass-panel come tutti gli altri overlay, quindi di base è semitrasparente/
+           sfocato. Qui lo rendiamo pieno con lo stesso colore solido --bg-main già usato
+           per il bottom sheet del timer, senza toccare Walkman/Frosted che restano com'erano. */
+        html:not(.walkman):not(.frosted) #apiModal .settings-sheet {
+            background: var(--bg-main);
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+        }
         @media (min-width: 768px) {
             #apiModal {
                 align-items: center;
@@ -576,7 +585,7 @@
         .results-header { display:none; align-items:center; gap:14px; padding:6px 8px 0; height:40px; }
         .results-header.visible { display:flex; }
         .results-header .back-btn { width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); flex:0 0 auto; }
-        .results-header .rt { font-size:20px; font-weight:700; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto; }
+        .results-header .rt { font-size:20px; font-weight:700; letter-spacing:-.01em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1 1 auto; color: var(--accent); }
         .results-header .refresh-btn { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.05); flex:0 0 auto; font-size:13px; opacity:.85; }
         .results-header .refresh-btn:active { transform:scale(0.9); }
 
@@ -713,6 +722,13 @@
             color: var(--walkman-highlight) !important;
             -webkit-text-stroke-color: var(--bg-gradient-top);
         }
+        /* Stesso motivo del repeat qui sopra: --accent in questo tema è bianco/argento,
+           quindi il timer acceso risultava indistinguibile dallo stato spento. */
+        html.walkman #sleepTimerBtn.active #sleepTimerIcon {
+            color: var(--walkman-highlight) !important;
+            -webkit-text-stroke-color: var(--bg-gradient-top);
+        }
+        html.walkman .results-header .rt { color: var(--walkman-highlight) !important; }
         html.walkman #pwaInstallBtn {
             background: transparent !important;
             border: 1px solid var(--text-main);
