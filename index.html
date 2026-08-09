@@ -15,7 +15,7 @@
         } catch (e) {}
     </script>
     <meta name="color-scheme" content="dark">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>YouTubette - Player</title>
 
     <!-- Stile critico: definito PRIMA di script/link esterni (Tailwind CDN, Font Awesome)
@@ -954,7 +954,7 @@
         <input type="password" name="password" autocomplete="new-password" tabindex="-1">
     </div>
 
-    <header class="shrink-0 z-40 relative">
+    <header class="shrink-0 z-40 relative" style="padding-top: env(safe-area-inset-top, 0px);">
         <!-- HEADER HOME: menu impostazioni + titolo + pillola di ricerca -->
         <div class="home-header" id="homeHeader">
             <div class="home-header-row">
@@ -1113,7 +1113,7 @@
 
 
         <div class="relative z-20 flex flex-col h-full px-6 pb-8 pt-4 justify-between pointer-events-none">
-            <div id="sheetHeaderDrag" class="w-full flex flex-col items-center py-2 shrink-0 cursor-pointer pointer-events-auto">
+            <div id="sheetHeaderDrag" class="w-full flex flex-col items-center py-2 shrink-0 cursor-pointer pointer-events-auto" style="padding-top: env(safe-area-inset-top, 0px);">
                 <div class="flex items-center justify-between w-full px-1">
                     <button id="closeSheetBtn" class="text-neutral-300 hover:text-white p-2 text-[19px] active:scale-90 transition-transform">
                         <i class="fa-solid fa-chevron-down"></i>
@@ -4481,6 +4481,25 @@
             document.getElementById('apiErrorBadge')?.classList.remove('hidden');
             document.getElementById('modalApiBadgeError').classList.remove('hidden');
         }
+
+        // --- Schermo intero (nasconde barra di stato e barra di navigazione Android) ---
+        // Il browser permette di entrare in fullscreen solo dopo un'interazione
+        // dell'utente (tap/click), quindi lo richiediamo al primo tocco sulla pagina
+        // e riproviamo automaticamente se il sistema dovesse uscirne (es. tastiera
+        // aperta, cambio orientamento). Se l'app è installata come PWA (aggiunta a
+        // schermata Home) con manifest "display":"fullscreen", questa chiamata è
+        // ridondante ma innocua: il sistema è già a schermo intero da solo.
+        (function setupFullscreen() {
+            function goFullscreen() {
+                const el = document.documentElement;
+                if (document.fullscreenElement) return;
+                const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+                if (req) req.call(el).catch(() => {});
+            }
+            document.addEventListener('click', goFullscreen, { once: true, capture: true });
+            document.addEventListener('touchend', goFullscreen, { once: true, capture: true });
+        })();
     </script>
 </body>
+
 </html>
