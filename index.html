@@ -326,10 +326,28 @@
         .custom-border-accent { border-color: var(--accent); }
         .custom-text-muted { color: var(--text-muted); }
 
-        /* Pulsante repeat nella Now Playing sheet: grigio spento come prev/next quando
-           disattivo, colore accento del tema (coerente con custom-text-accent) quando attivo. */
+        /* Pulsante repeat nella Now Playing sheet: dimensione fissa e tonda così, da spento,
+           ha la stessa "ingombro" del suo gemello invisibile a destra (mantiene la simmetria
+           attorno a play/pause), e da acceso può ricevere una cornice che segue la sua forma
+           circolare. */
+        #repeatBtn, #repeatRightPlaceholder {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9999px;
+            border: 1px solid transparent;
+            transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+        }
+        /* Acceso: colore accento del tema (viola nel tema di default) + sottile cornice
+           "vetro satinato" che ne segue il contorno tondo, per farlo risaltare di più. */
         #repeatBtn.active {
             color: var(--accent);
+            border-color: rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
         }
 
         /* --- STILI FILTRI CUSTOM DI RICERCA --- */
@@ -1132,8 +1150,8 @@
                     </div>
                 </div>
 
-                <div class="relative flex items-center justify-center gap-8 mb-8">
-                    <button id="repeatBtn" class="absolute left-0 text-gray-400 active:scale-90 transition-colors text-[18px] p-2" title="Ripeti">
+                <div class="flex items-center justify-center gap-5 mb-8">
+                    <button id="repeatBtn" class="text-gray-400 active:scale-90 transition-colors text-[16px]" title="Ripeti">
                         <i class="fa-solid fa-repeat" id="repeatIcon"></i>
                     </button>
                     <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step" id="prevIcon"></i></button>
@@ -1141,6 +1159,10 @@
                         <i class="fa-solid fa-play ml-1" id="playIcon"></i>
                     </button>
                     <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-forward-step" id="nextIcon"></i></button>
+                    <!-- Segnaposto invisibile: stessa "ingombro" del pulsante repeat, mantiene
+                         play/pause perfettamente centrato e lascia già lo spazio equidistante
+                         per una futura icona a destra. -->
+                    <div id="repeatRightPlaceholder" aria-hidden="true"></div>
                 </div>
 
                 <div class="hidden md:flex items-center space-x-3 justify-center custom-text-muted px-4 py-2 bg-white/5 rounded-2xl mb-2">
