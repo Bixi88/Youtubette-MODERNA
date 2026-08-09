@@ -375,27 +375,68 @@
             -webkit-text-stroke: 2.5px var(--bg-gradient-top);
             paint-order: stroke fill;
         }
-        /* Dropdown sveglia: stessa animazione a "tendina" del pannello filtri (.filter-drop),
-           colori presi dalle variabili tema così segue automaticamente Moderna/Walkman/Frosted
-           senza bisogno di regole dedicate per ogni skin. */
-        .sleep-timer-drop {
-            background: var(--bg-card);
-            border-radius: 14px;
-            border: 1px solid var(--hair, rgba(243,239,230,0.08));
-            max-height: 0; opacity: 0; pointer-events: none;
-            transition: max-height 0.32s cubic-bezier(0.16,1,0.3,1), opacity 0.24s ease;
+        /* Sleep timer: bottom sheet a piena larghezza (stile Spotify), overlay + sheet che
+           sale dal basso. Sfondo completamente opaco con --bg-main (a differenza di
+           .settings-sheet/.glass-panel qui sopra, che sono semitrasparenti/sfocati) così
+           segue il colore pieno di ogni skin invece di lasciar trasparire quello sotto. */
+        .sleep-timer-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 70;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.55);
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+            transition: opacity 0.3s ease, visibility 0s linear 0.3s;
         }
-        .sleep-timer-drop.open {
-            max-height: 240px; opacity: 1; pointer-events: auto;
+        .sleep-timer-modal.active {
+            opacity: 1;
+            visibility: visible;
+            pointer-events: auto;
+            transition: opacity 0.3s ease, visibility 0s linear 0s;
+        }
+        .sleep-timer-sheet {
+            width: 100%;
+            max-width: 480px;
+            background: var(--bg-main);
+            border-radius: 22px 22px 0 0;
+            padding: 12px 22px calc(22px + env(safe-area-inset-bottom, 0px));
+            transform: translateY(100%);
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .sleep-timer-modal.active .sleep-timer-sheet {
+            transform: translateY(0);
+        }
+        .sleep-timer-sheet-handle {
+            width: 36px;
+            height: 4px;
+            border-radius: 999px;
+            background: var(--text-muted);
+            opacity: 0.5;
+            margin: 0 auto 18px;
+        }
+        .sleep-timer-sheet-title {
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--text-main);
+            text-align: center;
+            margin-bottom: 14px;
+        }
+        .sleep-timer-sheet-divider {
+            height: 1px;
+            background: var(--hair, rgba(243,239,230,0.1));
+            margin: 0 -22px 4px;
         }
         .sleep-timer-option {
-            padding: 10px 14px;
-            font-size: 12px;
+            padding: 15px 4px;
+            font-size: 15px;
             color: var(--text-main);
             cursor: pointer;
-            transition: background-color 0.2s ease;
         }
-        .sleep-timer-option:hover, .sleep-timer-option:active {
+        .sleep-timer-option:active {
             background: rgba(255,255,255,0.06);
         }
 
@@ -1230,18 +1271,9 @@
                     <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-forward-step" id="nextIcon"></i></button>
                     <!-- Sleep timer: stessa "ingombro" ed estetica del pulsante repeat (vedi CSS
                          #repeatBtn/#sleepTimerBtn), mantiene play/pause perfettamente centrato. -->
-                    <div class="relative">
-                        <button id="sleepTimerBtn" class="relative text-gray-400 active:scale-90 transition-colors text-[13px]" title="Sleep timer">
-                            <i class="fa-solid fa-stopwatch" id="sleepTimerIcon"></i>
-                        </button>
-                        <div id="sleepTimerMenu" class="sleep-timer-drop absolute bottom-full right-0 mb-2 w-32 z-50 overflow-hidden">
-                            <div class="sleep-timer-option" data-minutes="10">10 min</div>
-                            <div class="sleep-timer-option" data-minutes="30">30 min</div>
-                            <div class="sleep-timer-option" data-minutes="60">60 min</div>
-                            <div class="sleep-timer-option" data-minutes="120">120 min</div>
-                            <div class="sleep-timer-option" data-minutes="240">240 min</div>
-                        </div>
-                    </div>
+                    <button id="sleepTimerBtn" class="relative text-gray-400 active:scale-90 transition-colors text-[13px]" title="Sleep timer">
+                        <i class="fa-solid fa-stopwatch" id="sleepTimerIcon"></i>
+                    </button>
                 </div>
 
                 <div class="hidden md:flex items-center space-x-3 justify-center custom-text-muted px-4 py-2 bg-white/5 rounded-2xl mb-2">
@@ -1250,6 +1282,20 @@
                         class="w-full h-1 rounded-full appearance-none cursor-pointer accent-[var(--text-main)] bg-neutral-700">
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal Sleep Timer -->
+    <div id="sleepTimerModal" class="sleep-timer-modal">
+        <div class="sleep-timer-sheet">
+            <div class="sleep-timer-sheet-handle"></div>
+            <h3 class="sleep-timer-sheet-title">Timer spegnimento</h3>
+            <div class="sleep-timer-sheet-divider"></div>
+            <div class="sleep-timer-option" data-minutes="10">10 minuti</div>
+            <div class="sleep-timer-option" data-minutes="30">30 minuti</div>
+            <div class="sleep-timer-option" data-minutes="60">60 minuti</div>
+            <div class="sleep-timer-option" data-minutes="120">120 minuti</div>
+            <div class="sleep-timer-option" data-minutes="240">240 minuti</div>
         </div>
     </div>
 
@@ -1791,22 +1837,19 @@
             document.getElementById('sleepTimerBtn').addEventListener('click', (e) => {
                 e.stopPropagation();
                 // Acceso (timer già impostato): il click spegne subito, senza passare dal
-                // menu. Spento: il click apre/chiude solo la tendina delle durate.
+                // modal. Spento: il click apre il bottom sheet con le durate.
                 if (sleepTimerHandle) {
                     cancelSleepTimer();
                 } else {
-                    toggleSleepTimerMenu();
+                    openSleepTimerModal();
                 }
             });
             document.querySelectorAll('.sleep-timer-option').forEach((opt) => {
                 opt.addEventListener('click', () => setSleepTimer(parseInt(opt.dataset.minutes, 10)));
             });
-            document.addEventListener('click', (e) => {
-                const menu = document.getElementById('sleepTimerMenu');
-                const btn = document.getElementById('sleepTimerBtn');
-                if (menu && menu.classList.contains('open') && !menu.contains(e.target) && !btn.contains(e.target)) {
-                    closeSleepTimerMenu();
-                }
+            // Click sull'overlay (non sulla sheet) chiude, stesso pattern di #apiModal.
+            document.getElementById('sleepTimerModal').addEventListener('click', (e) => {
+                if (e.target.id === 'sleepTimerModal') closeSleepTimerModal();
             });
 
             document.getElementById('sheetDownloadBtn').addEventListener('click', redirectToDownload);
@@ -4484,12 +4527,12 @@
             document.getElementById('sleepTimerBtn')?.classList.toggle('active', sleepTimerHandle !== null);
         }
 
-        function toggleSleepTimerMenu() {
-            document.getElementById('sleepTimerMenu')?.classList.toggle('open');
+        function openSleepTimerModal() {
+            document.getElementById('sleepTimerModal')?.classList.add('active');
         }
 
-        function closeSleepTimerMenu() {
-            document.getElementById('sleepTimerMenu')?.classList.remove('open');
+        function closeSleepTimerModal() {
+            document.getElementById('sleepTimerModal')?.classList.remove('active');
         }
 
         // Spegne un timer già attivo senza passare dal menu: premere di nuovo l'icona quando
@@ -4510,7 +4553,7 @@
                 updateSleepTimerButtonUI();
             }, minutes * 60 * 1000);
             updateSleepTimerButtonUI();
-            closeSleepTimerMenu();
+            closeSleepTimerModal();
         }
 
         // Chiamata SOLO quando il video finisce da solo (evento ENDED), non quando l'utente
