@@ -328,26 +328,26 @@
 
         /* Pulsante repeat nella Now Playing sheet: dimensione fissa e tonda così, da spento,
            ha la stessa "ingombro" del suo gemello invisibile a destra (mantiene la simmetria
-           attorno a play/pause), e da acceso può ricevere una cornice che segue la sua forma
-           circolare. */
+           attorno a play/pause). */
         #repeatBtn, #repeatRightPlaceholder {
             width: 25px;
             height: 25px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 9999px;
-            border: 1px solid transparent;
-            transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+            transition: color 0.2s ease;
         }
-        /* Acceso: colore accento del tema (viola nel tema di default) + sottile cornice
-           "vetro satinato" che ne segue il contorno tondo, per farlo risaltare di più. */
-        #repeatBtn.active {
+        /* Acceso: colore accento del tema (viola nel tema di default) + uno strato
+           "vetro satinato" che segue esattamente la sagoma dell'icona (non un cerchio):
+           più drop-shadow bianchi sovrapposti, che a differenza di border/box-shadow
+           seguono i pixel della glifo (le doppie frecce), creando un alone frosted
+           intorno al simbolo stesso. */
+        #repeatBtn.active #repeatIcon {
             color: var(--accent);
-            border-color: rgba(255, 255, 255, 0.18);
-            background: rgba(255, 255, 255, 0.06);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
+            filter:
+                drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))
+                drop-shadow(0 0 3px rgba(255, 255, 255, 0.65))
+                drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
         }
 
         /* --- STILI FILTRI CUSTOM DI RICERCA --- */
@@ -616,10 +616,14 @@
         /* Repeat acceso in questo tema: --accent qui è il bianco/argento del resto
            dell'interfaccia, quindi l'icona risultava bianca. Usiamo lo stesso viola
            "highlight" già riservato in questo tema agli indicatori attivi (barra del
-           minutaggio, brano in riproduzione) al posto di --accent. */
-        html.walkman #repeatBtn.active {
+           minutaggio, brano in riproduzione) al posto di --accent, con lo stesso alone
+           frosted che segue la sagoma dell'icona usato nelle altre skin. */
+        html.walkman #repeatBtn.active #repeatIcon {
             color: var(--walkman-highlight) !important;
-            border-color: var(--walkman-highlight);
+            filter:
+                drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))
+                drop-shadow(0 0 3px rgba(255, 255, 255, 0.65))
+                drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
         }
         html.walkman #pwaInstallBtn {
             background: transparent !important;
@@ -833,18 +837,17 @@
             color: #fff !important;
             display: flex; align-items: center; justify-content: center; font-size: 15px;
         }
-        /* Repeat acceso in questo tema: lo sfondo quasi trasparente pensato per gli
-           altri temi qui si perde sopra il gradiente chiaro dello sfondo, e il viola
-           di --accent (pensato per il gradiente scuro del play/pausa) è troppo simile
-           al blu-grigio circostante. Usiamo lo stesso trattamento "vetro satinato pieno"
-           di avanti/indietro come sfondo, e --frosted-highlight (lo stesso lilla più
-           chiaro già usato per gli altri indicatori "attivo" di questo tema, es. brano
-           in riproduzione) al posto di --accent per l'icona e il bordo, molto più
-           leggibile su questo sfondo chiaro.*/
-        html.frosted #repeatBtn.active {
+        /* Repeat acceso in questo tema: --accent (pensato per il gradiente scuro del
+           play/pausa) è troppo simile al blu-grigio di sfondo. Usiamo lo stesso lilla
+           "highlight" già riservato in questo tema agli altri indicatori attivi (es.
+           brano in riproduzione) per l'icona, con lo stesso alone frosted bianco che
+           segue la sagoma dell'icona usato nelle altre skin. */
+        html.frosted #repeatBtn.active #repeatIcon {
             color: var(--frosted-highlight) !important;
-            background: var(--frosted-btn);
-            border-color: var(--frosted-highlight);
+            filter:
+                drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))
+                drop-shadow(0 0 3px rgba(255, 255, 255, 0.65))
+                drop-shadow(0 0 6px rgba(255, 255, 255, 0.4));
         }
         /* Pulsante download nell'header "In Riproduzione": era rimasto sullo stile
            "piatto" (solo icona, colore --accent) mentre avanti/indietro sono diventati
