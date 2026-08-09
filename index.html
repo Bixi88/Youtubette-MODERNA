@@ -1623,16 +1623,19 @@
                 setPlayIconState(true);
                 updateDuration(); 
                 updateMediaSessionState(true);
+                updateMediaSessionPosition();
                 syncKeepAlive(true);
             } else if (event.data == YT.PlayerState.PAUSED) {
                 appState.isPlaying = false;
                 setPlayIconState(false);
                 updateMediaSessionState(false);
+                updateMediaSessionPosition();
                 syncKeepAlive(false);
             } else if (event.data == YT.PlayerState.ENDED) {
                 appState.isPlaying = false;
                 setPlayIconState(false);
                 updateMediaSessionState(false);
+                updateMediaSessionPosition();
                 syncKeepAlive(false);
                 handleTrackEnded();
             }
@@ -2562,6 +2565,7 @@
             const duration = player.getDuration() || 0;
             player.seekTo(duration * scrubPercentage, true);
             activeScrubType = null;
+            updateMediaSessionPosition();
         }
 
         // --- CACHE BRANI (title+artista -> id YouTube / copertina) ---
@@ -4448,6 +4452,26 @@
             if ('mediaSession' in navigator) navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
         }
 
+        // Il minutaggio nella notifica/lockscreen di Android non arriva "gratis" solo
+        // impostando i metadata: va dichiarato esplicitamente qui, altrimenti il sistema
+        // disegna la barra di avanzamento ma senza le cifre (esattamente il sintomo
+        // segnalato). playbackRate 0 da fermo evita che Android continui ad "estrapolare"
+        // in avanti la posizione come se stesse ancora scorrendo mentre è in pausa.
+        function updateMediaSessionPosition() {
+            if (!('mediaSession' in navigator) || !navigator.mediaSession.setPositionState) return;
+            if (!player?.getDuration) return;
+            const duration = player.getDuration();
+            if (!duration || !isFinite(duration) || duration <= 0) return;
+            const position = Math.min(player.getCurrentTime ? player.getCurrentTime() : 0, duration);
+            try {
+                navigator.mediaSession.setPositionState({
+                    duration,
+                    position,
+                    playbackRate: appState.isPlaying ? 1 : 0
+                });
+            } catch (e) {}
+        }
+
         function setupMediaSessionHandlers() {
             if ('mediaSession' in navigator) {
                 navigator.mediaSession.setActionHandler('play', togglePlay);
@@ -4622,6 +4646,7 @@
                         miniProgressBar.style.width = `${progressPercent}%`;
                         document.getElementById('currentTime').innerText = formatTime(currentTime);
                         document.getElementById('miniCurrentTime').innerText = formatTime(currentTime);
+                        updateMediaSessionPosition();
                     }
 
                     if (duration > 0) {
