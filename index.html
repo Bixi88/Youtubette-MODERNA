@@ -182,26 +182,20 @@
         /* (Placeholder dell'artwork rimosso su richiesta: ora, prima del caricamento,
            non c'è alcun elemento visibile al posto della copertina.) */
 
-        /* La sheet non usa più top:100%/translateY: le sue dimensioni/posizione/raggio
-           sono impostate frame per frame da JS (vedi render() più sotto), interpolando
-           dal rettangolo esatto del miniplayer fino a schermo intero — è la card stessa
-           a crescere, non un pannello a tutta altezza che scorre sotto un artwork fisso.
-           opacity/pointer-events di riposo (chiusa) qui sotto sono lo stato PRIMA che
-           JS prenda il controllo al primo gesto. */
         #nowPlayingSheet {
             position: fixed;
+            top: 100%;
+            left: 0;
+            right: 0;
+            height: 100%;
             z-index: 100;
-            overflow: hidden;
+            transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+            will-change: transform;
             background: var(--bg-gradient);
-            opacity: 0;
-            pointer-events: none;
+            overflow: hidden;
         }
-        /* Comparsa scaglionata di header/controlli durante l'apertura/chiusura hero
-           (vedi render() in JS): l'opacità/transform vengono impostati inline
-           frame per frame, questa transition serve solo a smorzare eventuali scatti
-           quando lo stato passa da drag manuale a settle automatico. */
-        #sheetBottomControls, #sheetHeaderDrag, #sheetCompactContent {
-            transition: opacity 0.12s linear;
+        #nowPlayingSheet.expanded {
+            transform: translateY(-100%);
         }
 
         #miniPlayer {
@@ -300,11 +294,17 @@
            ingrandita e i bordi finiscono fuori dal cerchio/contenitore, che ha
            overflow:hidden), così i bordi neri spariscono anche sulle copertine che
            li hanno. Valore regolabile da qui: più alto = più zoom/crop. */
-        :root { --artwork-zoom: 1.32; }
+        :root { --artwork-zoom: 1.32; --miniplayer-artwork-zoom: 1; }
         #sheetArtworkImg,
-        #miniPlayerImg,
         .track-thumb-img {
             transform: scale(var(--artwork-zoom));
+            transform-origin: center;
+        }
+        /* L'artwork del mini player va mostrata per intero dentro la sua cornice
+           circolare, senza lo zoom-crop usato altrove: qui usiamo un fattore
+           regolabile a parte (default 1 = nessuno zoom). */
+        #miniPlayerImg {
+            transform: scale(var(--miniplayer-artwork-zoom));
             transform-origin: center;
         }
 
@@ -510,7 +510,7 @@
            risultati di ricerca, playlist recenti nel menu impostazioni, miniplayer e now playing. */
         html.walkman .qcard .circle,
         html.walkman .settings-playlist-thumb,
-        html.walkman #miniPlayerImgFrame,
+        html.walkman #miniPlayerImg,
         html.walkman #sheetArtworkFrame,
         html.walkman .track-thumb-img {
             border-radius: 50% !important;
@@ -678,7 +678,7 @@
            si perdeva contro lo sfondo scuro). */
         html.frosted .qcard .circle,
         html.frosted .settings-playlist-thumb,
-        html.frosted #miniPlayerImgFrame {
+        html.frosted #miniPlayerImg {
             border-radius: 50% !important;
             border: 2.5px solid rgba(255,255,255,0.55);
         }
@@ -1019,14 +1019,7 @@
         
         <div id="miniPlayerContent" class="flex items-center justify-between w-full flex-1 min-w-0 mb-0.5">
             <div class="flex items-center flex-1 min-w-0 mr-4 h-11 overflow-hidden" id="miniPlayerDetails">
-                <!-- Cornice fissa 44x44: prima lo scale-zoom (sotto, --artwork-zoom) era applicato
-                     direttamente a quest'immagine rotonda, quindi ingrandiva anche il SUO bordo
-                     esterno, facendola "sborare" fuori dai 44px invece di restare un cerchio
-                     pulito della dimensione giusta. Ora la cornice (questo div, overflow:hidden)
-                     resta sempre 44x44 e SOLO l'immagine al suo interno si ingrandisce/ritaglia. -->
-                <div id="miniPlayerImgFrame" class="w-11 h-11 rounded-full overflow-hidden shadow-md shrink-0 z-10 relative">
-                    <img id="miniPlayerImg" class="w-full h-full object-cover opacity-0 transition-opacity duration-300" alt="" draggable="false">
-                </div>
+                <img id="miniPlayerImg" class="w-11 h-11 rounded-full object-cover shadow-md shrink-0 z-10 opacity-0 transition-opacity duration-300" alt="" draggable="false">
                 
                 <div class="ml-3 min-w-0 flex-1 h-full flex flex-col justify-center overflow-hidden" id="miniTextContainer">
                     <div class="marquee-wrapper w-full font-bold" id="miniMarqueeWrapper">
@@ -1055,31 +1048,8 @@
         </div>
     </div>
 
-    <!-- Hero Artwork: copia "volante" della copertina, usata SOLO durante l'apertura/chiusura
-         della now playing sheet per farla ingrandire/rimpicciolire in modo fluido dalla sua
-         posizione nel miniplayer a quella nella sheet (e viceversa), seguendo il dito durante
-         lo swipe esattamente come il resto della sheet. Vedi updateHeroArtwork() più sotto. -->
-    <div id="heroArtwork" style="position:fixed; border-radius:50%; overflow:hidden; z-index:150; pointer-events:none; opacity:0; will-change:transform; transform-origin:0 0;">
-        <img id="heroArtworkImg" class="w-full h-full object-cover" alt="" draggable="false">
-    </div>
-
     <!-- Now Playing Sheet -->
     <div id="nowPlayingSheet" class="flex flex-col select-none custom-bg-main">
-
-        <!-- Contenuto compatto: imita esattamente il layout del miniplayer (immagine a
-             sinistra, testo, pulsante play a destra). Visibile solo nella prima parte
-             dell'apertura/ultima della chiusura (vedi render() in JS): dà l'illusione che
-             sia lo STESSO contenuto del miniplayer a "crescere" insieme alla card, invece
-             di un pannello vuoto che si ingrandisce e poi mostra i controlli di colpo. -->
-        <div id="sheetCompactContent" class="absolute inset-0 z-30 flex items-center" style="padding-left: 76px; padding-right: 14px;">
-            <div class="min-w-0 flex-1">
-                <div id="sheetCompactTitle" class="text-sm font-bold truncate text-[var(--text-main)]"></div>
-                <div id="sheetCompactSubtitle" class="text-xs truncate custom-text-muted mt-0.5"></div>
-            </div>
-            <button id="sheetCompactPlayBtn" class="w-[38px] h-[38px] rounded-full flex items-center justify-center text-[15px] shadow-md custom-bg-accent shrink-0 ml-3" style="color:#1a1305;">
-                <i class="fa-solid fa-play ml-0.5" id="sheetCompactPlayIcon"></i>
-            </button>
-        </div>
 
         <div id="sheetSwipeCloseArea" class="absolute inset-x-0 top-0 z-10 cursor-grab active:cursor-grabbing" style="touch-action: none; bottom: 310px;"></div>
 
@@ -1120,7 +1090,7 @@
             </div>
 
             <!-- Area Controlli Inferiore -->
-            <div id="sheetBottomControls" class="w-full max-w-sm mx-auto shrink-0 pointer-events-auto">
+            <div class="w-full max-w-sm mx-auto shrink-0 pointer-events-auto">
                 <div class="w-full text-left mb-5">
                     <div id="swipeTitleContainer" class="w-full py-1 cursor-grab active:cursor-grabbing select-none" style="touch-action: none;">
                         <div class="marquee-wrapper">
@@ -1349,174 +1319,23 @@
         // questo flag serve a impedire che quel click "fantasma" apra la sheet.
         let miniPlayerWasDragged = false;
 
-        // ============================================================
-        // CONTAINER TRANSFORM: la sheet non scorre più su come una tendina —
-        // è la sheet STESSA (le sue dimensioni/posizione/border-radius) a crescere
-        // dal rettangolo esatto del miniplayer fino a schermo intero, esattamente
-        // come nel video di riferimento. La copertina (sempre rotonda, qui) è un
-        // secondo elemento "hero" che nel frattempo cambia dimensione/posizione in
-        // modo continuo. `progress` (0 chiusa .. 1 aperta) è l'UNICA fonte di verità:
-        // sia il drag manuale sia le aperture/chiusure a tap chiamano sempre e solo
-        // render(progress), mai transform/classi CSS direttamente — questo elimina
-        // la classe di bug della versione precedente (che doveva "indovinare" la
-        // posizione leggendo la matrice CSS a metà transizione).
-        const heroArtworkEl = document.getElementById('heroArtwork');
-        const heroArtworkImgEl = document.getElementById('heroArtworkImg');
-        const sheetBottomControlsEl = document.getElementById('sheetBottomControls');
-        const sheetHeaderDragEl = document.getElementById('sheetHeaderDrag');
-        const sheetCompactContentEl = document.getElementById('sheetCompactContent');
-        const sheetCompactTitleEl = document.getElementById('sheetCompactTitle');
-        const sheetCompactSubtitleEl = document.getElementById('sheetCompactSubtitle');
-        const sheetCompactPlayIconEl = document.getElementById('sheetCompactPlayIcon');
-        const miniPlayerImgFrameEl = document.getElementById('miniPlayerImgFrame');
-
-        let progress = 0; // 0 = chiusa (miniplayer), 1 = aperta (sheet a schermo intero)
-        let heroBase = null; // { containerClosed, artClosed, artOpen } — vedi measureHeroBase()
-        let tweenRafId = null;
-
-        function lerp(a, b, t) { return a + (b - a) * t; }
-        function clamp01(v) { return Math.max(0, Math.min(1, v)); }
-        // Fa iniziare/finire un fade prima/dopo certe soglie di progress, invece che in modo
-        // lineare su tutto il gesto: è quello che dà l'effetto "i controlli compaiono dopo"
-        // visto nel video di riferimento, invece di una semplice dissolvenza 1:1 con lo swipe.
-        function smoothstep(edge0, edge1, x) {
-            const t = clamp01((x - edge0) / (edge1 - edge0));
-            return t * t * (3 - 2 * t);
-        }
-
-        // Misura i tre rettangoli di riferimento (container chiuso, artwork chiusa,
-        // artwork aperta). Va richiamata a inizio di OGNI gesto (drag o tap) così è
-        // sempre aggiornata a rotazione schermo/resize/breakpoint corrente.
-        //
-        // Per l'artwork "aperta": invece di calcolarla a mano (fragile, causa del bug
-        // precedente), ridimensioniamo la sheet a schermo intero PER UN SOLO ISTANTE
-        // sincrono, lasciamo che il suo layout interno (flex, centratura, breakpoint
-        // md:w-80 ecc. — tutto già scritto in CSS) calcoli da solo dove finisce
-        // l'artwork, la misuriamo, e ripristiniamo subito lo stato precedente: essendo
-        // tutto nello stesso tick JS, il browser non arriva mai a dipingere lo stato
-        // intermedio, quindi non c'è nessun flicker visibile.
-        function measureHeroBase() {
-            if (!miniPlayer || !miniPlayerImgFrameEl || !sheetArtworkFrameEl || !nowPlayingSheet) return null;
-            const mpRect = miniPlayer.getBoundingClientRect();
-            if (mpRect.width === 0 || mpRect.height === 0) return null;
-            const miniArtRect = miniPlayerImgFrameEl.getBoundingClientRect();
-            const mpRadius = parseFloat(getComputedStyle(miniPlayer).borderTopLeftRadius) || 24;
-
-            const savedInlineStyle = nowPlayingSheet.getAttribute('style') || '';
-            const vw = window.innerWidth, vh = window.innerHeight;
-            nowPlayingSheet.style.left = '0px';
-            nowPlayingSheet.style.top = '0px';
-            nowPlayingSheet.style.width = vw + 'px';
-            nowPlayingSheet.style.height = vh + 'px';
-            nowPlayingSheet.style.borderRadius = '0px';
-            const artOpenRect = sheetArtworkFrameEl.getBoundingClientRect();
-            nowPlayingSheet.setAttribute('style', savedInlineStyle);
-
-            if (artOpenRect.width === 0) return null;
-
-            return {
-                containerClosed: { left: mpRect.left, top: mpRect.top, width: mpRect.width, height: mpRect.height, radius: mpRadius },
-                artClosed: { left: miniArtRect.left, top: miniArtRect.top, width: miniArtRect.width, height: miniArtRect.height },
-                artOpen: { left: artOpenRect.left, top: artOpenRect.top, width: artOpenRect.width, height: artOpenRect.height }
-            };
-        }
-
-        // L'UNICA funzione che disegna lo stato intermedio: sheet, copertina hero,
-        // e comparsa scaglionata di contenuto compatto/completo. Chiamata sia dal
-        // drag (ad ogni touchmove) sia dal tween automatico (ad ogni frame).
-        function render(p) {
-            progress = clamp01(p);
-            if (!heroBase) return;
-            const { containerClosed, artClosed, artOpen } = heroBase;
-            const vw = window.innerWidth, vh = window.innerHeight;
-            const open = { left: 0, top: 0, width: vw, height: vh, radius: 0 };
-
-            const left = lerp(containerClosed.left, open.left, progress);
-            const top = lerp(containerClosed.top, open.top, progress);
-            const width = lerp(containerClosed.width, open.width, progress);
-            const height = lerp(containerClosed.height, open.height, progress);
-            const radius = lerp(containerClosed.radius, open.radius, progress);
-
-            nowPlayingSheet.style.left = left + 'px';
-            nowPlayingSheet.style.top = top + 'px';
-            nowPlayingSheet.style.width = width + 'px';
-            nowPlayingSheet.style.height = height + 'px';
-            nowPlayingSheet.style.borderRadius = radius + 'px';
-            nowPlayingSheet.style.opacity = progress > 0.001 ? '1' : '0';
-            nowPlayingSheet.style.pointerEvents = progress > 0.001 ? 'auto' : 'none';
-
-            // Copertina hero: stesso elemento sempre, cambia solo size/posizione (cerchio).
-            const size = lerp(artClosed.width, artOpen.width, progress);
-            const cx = lerp(artClosed.left + artClosed.width / 2, artOpen.left + artOpen.width / 2, progress);
-            const cy = lerp(artClosed.top + artClosed.height / 2, artOpen.top + artOpen.height / 2, progress);
-            heroArtworkEl.style.width = size + 'px';
-            heroArtworkEl.style.height = size + 'px';
-            heroArtworkEl.style.left = (cx - size / 2) + 'px';
-            heroArtworkEl.style.top = (cy - size / 2) + 'px';
-            heroArtworkEl.style.opacity = (progress > 0.001 && progress < 0.999) ? '1' : '0';
-
-            // Contenuto compatto (dentro la sheet, imita il miniplayer) vs completo:
-            // si scambiano con un fade, non convivono a piena opacità insieme.
-            const compactOpacity = 1 - smoothstep(0, 0.22, progress);
-            if (sheetCompactContentEl) {
-                sheetCompactContentEl.style.opacity = compactOpacity;
-                sheetCompactContentEl.style.pointerEvents = compactOpacity < 0.05 ? 'none' : '';
+        // Legge la posizione VERA e attuale della sheet (in % di translateY), qualunque sia lo
+        // stato in cui si trova in quel momento (chiusa, aperta, o a metà di un'altra animazione).
+        // Serve per far sì che ogni nuovo gesto riparta sempre da dove la sheet si trova davvero,
+        // invece di assumere che parta per forza da "chiusa" (0%) o "aperta" (-100%): questo è ciò
+        // che rende la transizione sempre continua e sempre interrompibile in qualsiasi istante.
+        function getSheetCurrentPercentY() {
+            const style = window.getComputedStyle(nowPlayingSheet);
+            const transform = style.transform;
+            if (!transform || transform === 'none') {
+                return nowPlayingSheet.classList.contains('expanded') ? -100 : 0;
             }
-            const fullOpacity = smoothstep(0.5, 0.95, progress);
-            if (sheetBottomControlsEl) {
-                sheetBottomControlsEl.style.opacity = fullOpacity;
-                sheetBottomControlsEl.style.transform = `translate3d(0, ${lerp(16, 0, fullOpacity)}px, 0)`;
-            }
-            if (sheetHeaderDragEl) {
-                sheetHeaderDragEl.style.opacity = smoothstep(0.25, 0.75, progress);
-            }
-
-            // Nasconde gli originali (miniplayer vero / artwork rotonda vera della sheet)
-            // finché il clone hero li sta sostituendo visivamente; li rilascia (stile
-            // inline vuoto) appena il clone stesso sparisce, così non interferiscono con
-            // le loro normali transizioni (fade al caricamento immagine, vinile che ruota).
-            sheetArtworkFrameEl.style.opacity = progress > 0.995 ? '' : '0';
-            miniPlayer.style.opacity = progress > 0.001 ? '0' : '';
-            miniPlayer.style.pointerEvents = progress > 0.001 ? 'none' : '';
-        }
-
-        // Copia titolo/sottotitolo/icona play correnti del miniplayer nel contenuto
-        // compatto della sheet: è uno "scatto" preso a inizio gesto, non un binding
-        // live, ma essendo il gesto lungo ~300-400ms va benissimo così.
-        function syncCompactContent() {
-            if (sheetCompactTitleEl) sheetCompactTitleEl.textContent = document.getElementById('miniPlayerTitle')?.textContent || '';
-            if (sheetCompactSubtitleEl) sheetCompactSubtitleEl.textContent = document.getElementById('miniPlayerChannel')?.textContent || '';
-            const miniIcon = document.getElementById('miniPlayIcon');
-            if (sheetCompactPlayIconEl && miniIcon) sheetCompactPlayIconEl.className = miniIcon.className.replace('ml-0.5', '');
-        }
-
-        // Va chiamata a inizio di OGNI gesto (drag o tap, apertura o chiusura): rimisura
-        // i rettangoli di riferimento e sincronizza il contenuto compatto. Se la misura
-        // fallisce (miniplayer non visibile ecc.) `heroBase` resta null e render() no-op,
-        // quindi nel peggiore dei casi semplicemente non succede nulla di visibile.
-        function beginHeroGesture() {
-            heroBase = measureHeroBase();
-            syncCompactContent();
-            if (sheetArtworkImgEl) heroArtworkImgEl.src = sheetArtworkImgEl.src;
-        }
-
-        // Tween manuale (per apertura/chiusura a TAP, non per drag) — anima `progress`
-        // nel tempo con un'easing "ease out", chiamando render() ogni frame. Interrompibile:
-        // una chiamata successiva a animateTo() o un nuovo drag annullano quella in corso.
-        function easeOutExpo(t) { return t === 1 ? 1 : 1 - Math.pow(2, -10 * t); }
-        function animateTo(target, duration) {
-            if (tweenRafId) cancelAnimationFrame(tweenRafId);
-            const start = progress, t0 = performance.now();
-            function step(now) {
-                const t = clamp01((now - t0) / duration);
-                render(lerp(start, target, easeOutExpo(t)));
-                if (t < 1) tweenRafId = requestAnimationFrame(step);
-                else tweenRafId = null;
-            }
-            tweenRafId = requestAnimationFrame(step);
-        }
-        function cancelHeroTween() {
-            if (tweenRafId) { cancelAnimationFrame(tweenRafId); tweenRafId = null; }
+            const matrixMatch = transform.match(/matrix\(([^)]+)\)/);
+            if (!matrixMatch) return nowPlayingSheet.classList.contains('expanded') ? -100 : 0;
+            const values = matrixMatch[1].split(',').map(v => parseFloat(v.trim()));
+            const translateYpx = values[5] || 0;
+            const height = nowPlayingSheet.offsetHeight || window.innerHeight;
+            return (translateYpx / height) * 100;
         }
 
         if ('serviceWorker' in navigator) {
@@ -1695,8 +1514,7 @@
                 let handled = false;
                 if (nowPlayingSheet.classList.contains('expanded')) {
                     nowPlayingSheet.classList.remove('expanded');
-                    beginHeroGesture();
-                    animateTo(0, 300);
+                    nowPlayingSheet.style.transform = '';
                     handled = true;
                 }
                 if (filterMenu && filterMenu.classList.contains('open')) {
@@ -1838,18 +1656,6 @@
             closeSheetBtn.addEventListener('click', () => {
                 closeNowPlayingSheet();
             });
-
-            // Pulsante play del contenuto compatto della sheet (vedi #sheetCompactContent):
-            // stessa azione del play del miniplayer, ma va fermato qui altrimenti il tap
-            // si propagherebbe come se fosse un tocco sulla card (che aprirebbe/chiuderebbe).
-            const sheetCompactPlayBtnEl = document.getElementById('sheetCompactPlayBtn');
-            if (sheetCompactPlayBtnEl) {
-                sheetCompactPlayBtnEl.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    togglePlay();
-                    syncCompactContent();
-                });
-            }
 
             document.getElementById('playPauseBtn').addEventListener('click', togglePlay);
             document.getElementById('miniPlayPauseBtn').addEventListener('click', (e) => {
@@ -2094,9 +1900,14 @@
         function openNowPlayingSheet() {
             // Riparte sempre dalla posizione reale attuale (utile se arriva subito dopo un
             // trascinamento interrotto a metà), animando da lì fino a completamente aperta.
-            beginHeroGesture();
+            const startPercent = getSheetCurrentPercentY();
+            nowPlayingSheet.style.transition = 'none';
+            nowPlayingSheet.style.transform = `translate3d(0, ${startPercent}%, 0)`;
+            // Forza il browser a registrare la posizione di partenza prima di animare.
+            void nowPlayingSheet.offsetHeight;
+            nowPlayingSheet.style.transition = 'transform 0.38s cubic-bezier(0.22, 1, 0.36, 1)';
             nowPlayingSheet.classList.add('expanded');
-            animateTo(1, 380);
+            nowPlayingSheet.style.transform = '';
             // La History API è gestita in modo indipendente dall'animazione: se lo stato "sheet"
             // è già in cima allo stack non lo duplichiamo, per evitare che tap ravvicinati
             // desincronizzino pushState/back e blocchino il gesto successivo.
@@ -2117,18 +1928,22 @@
         }
 
         function closeNowPlayingSheet() {
-            beginHeroGesture();
-            // La rimozione vera e propria della classe 'expanded' e l'animazione verso
-            // chiuso vengono lasciate al gestore di popstate qui sotto (che le fa già): se
-            // le facessimo già ora, quando popstate scatta (sempre, anche per una chiusura
-            // "manuale" via pulsante/swipe) non troverebbe più nulla da chiudere e
-            // scambierebbe l'azione per un back "a vuoto" premuto dalla home, facendo
-            // comparire per errore il popup "tocca di nuovo per uscire".
+            const startPercent = getSheetCurrentPercentY();
+            nowPlayingSheet.style.transition = 'none';
+            nowPlayingSheet.style.transform = `translate3d(0, ${startPercent}%, 0)`;
+            void nowPlayingSheet.offsetHeight;
+            nowPlayingSheet.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+            // La rimozione vera e propria della classe 'expanded' viene lasciata al
+            // gestore di popstate qui sotto (che la fa già): se la rimuovessimo già ora,
+            // quando popstate scatta (sempre, anche per una chiusura "manuale" via
+            // pulsante/swipe) non troverebbe più nulla da chiudere e scambierebbe
+            // l'azione per un back "a vuoto" premuto dalla home, facendo comparire per
+            // errore il popup "tocca di nuovo per uscire".
             if (window.history.state && window.history.state.page === 'sheet') {
                 window.history.back();
             } else {
                 nowPlayingSheet.classList.remove('expanded');
-                animateTo(0, 300);
+                nowPlayingSheet.style.transform = '';
             }
         }
 
@@ -2251,27 +2066,28 @@
         }
 
         function setupSheetCloseSwipe() {
-            let startY = 0, currentY = 0, isDragging = false, baseProgress = 1;
+            let startY = 0, currentY = 0, isDragging = false, basePercent = -100;
 
             const onStart = (y) => {
                 isDragging = true;
                 startY = y;
-                currentY = 0;
                 // Parte sempre da dove la sheet si trova realmente in quel momento, anche se
                 // arriva a metà di un'animazione precedente non ancora terminata.
-                cancelHeroTween();
-                baseProgress = progress;
-                beginHeroGesture();
+                basePercent = getSheetCurrentPercentY();
+                nowPlayingSheet.style.transition = 'none';
             };
 
             const onMove = (y) => {
                 if (!isDragging) return;
                 currentY = y - startY;
                 if (currentY > 0) {
-                    const vh = window.innerHeight;
-                    const nextProgress = clamp01(baseProgress - currentY / (vh * 0.55));
+                    const height = nowPlayingSheet.offsetHeight || window.innerHeight;
+                    const dragPercent = (currentY / height) * 100;
+                    const nextPercent = Math.min(0, basePercent + dragPercent);
                     window.requestAnimationFrame(() => {
-                        if (isDragging) render(nextProgress);
+                        if (isDragging) {
+                            nowPlayingSheet.style.transform = `translate3d(0, ${nextPercent}%, 0)`;
+                        }
                     });
                 }
             };
@@ -2279,12 +2095,14 @@
             const onEnd = () => {
                 if (!isDragging) return;
                 isDragging = false;
-
+                
+                nowPlayingSheet.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+                
                 if (currentY > 100) {
                     hapticFeedback();
                     closeNowPlayingSheet();
                 } else {
-                    animateTo(1, 260);
+                    nowPlayingSheet.style.transform = '';
                 }
                 currentY = 0;
             };
@@ -2308,7 +2126,7 @@
             const OPEN_DRAG_DISTANCE = Math.min(window.innerHeight * 0.5, 420);
             const OPEN_DRAG_THRESHOLD = 0.22; // % di progresso oltre cui, al rilascio, lo sheet si apre del tutto
 
-            let miniDragBaseProgress = 0;
+            let miniDragBasePercent = 0;
             // Vero se durante QUESTO trascinamento la sheet è stata effettivamente spostata almeno
             // una volta: usato al rilascio per decidere se "atterrarla", indipendentemente da come
             // sono gli ultimi micro-movimenti del dito (che a volte, per un attimo, sono più
@@ -2332,10 +2150,8 @@
                 dragDirection = null;
                 // Riparte sempre dalla posizione reale della sheet, non da "chiusa" per forza:
                 // così il gesto resta sotto controllo anche subito dopo un'altra animazione.
-                cancelHeroTween();
-                miniDragBaseProgress = progress;
+                miniDragBasePercent = getSheetCurrentPercentY();
                 miniTextContainer.classList.add('dragging-active');
-                beginHeroGesture();
             };
             // Il testo scorre solo per un breve tratto (mai fino a sovrapporre thumbnail o pulsante play)
             // e la dissolvenza si completa esattamente quando raggiunge quel limite: niente più
@@ -2369,22 +2185,29 @@
                 } else if (miniCurrentY < 0) {
                     // Trascinamento verso l'alto: lo sheet segue il dito in tempo reale,
                     // esattamente come già succede in chiusura, invece di apparire di scatto.
-                    // Parte sempre dalla posizione reale attuale (miniDragBaseProgress), non da 0
+                    // Parte sempre dalla posizione reale attuale (miniDragBasePercent), non da 0
                     // per forza, così resta continuo anche se si ritocca subito dopo un rilascio.
                     sheetWasMoved = true;
-                    const dragProgress = Math.abs(miniCurrentY) / OPEN_DRAG_DISTANCE;
-                    render(clamp01(miniDragBaseProgress + dragProgress));
+                    const dragPercent = (Math.abs(miniCurrentY) / OPEN_DRAG_DISTANCE) * 100;
+                    const nextPercent = Math.max(-100, miniDragBasePercent - dragPercent);
+                    nowPlayingSheet.style.transition = 'none';
+                    nowPlayingSheet.style.transform = `translate3d(0, ${nextPercent}%, 0)`;
                 }
             };
             const settleSheetDrag = (shouldOpen) => {
+                // Eseguito in modo sincrono (niente requestAnimationFrame): se lo facessimo in modo
+                // asincrono, un nuovo tocco arrivato subito dopo potrebbe "vincere" la corsa e poi
+                // essere comunque sovrascritto da questo frame in ritardo, facendo scattare la sheet
+                // di colpo e dando l'impressione di dover aspettare la fine dell'animazione.
+                nowPlayingSheet.style.transition = 'transform 0.38s cubic-bezier(0.22, 1, 0.36, 1)';
                 if (shouldOpen) {
                     nowPlayingSheet.classList.add('expanded');
-                    animateTo(1, 380);
+                    nowPlayingSheet.style.transform = '';
                     if (!window.history.state || window.history.state.page !== 'sheet') {
                         window.history.pushState({ page: 'sheet' }, 'Sheet');
                     }
                 } else {
-                    animateTo(0, 300);
+                    nowPlayingSheet.style.transform = '';
                 }
             };
             const endMiniDrag = () => {
@@ -2397,8 +2220,9 @@
                     // micro-movimento orizzontale/verticale del dito, che può ingannare vicino al
                     // rilascio): così la sheet viene sempre "atterrata" da dove si trova davvero,
                     // aperta o richiusa, e non resta mai abbandonata a metà.
+                    const finalPercent = getSheetCurrentPercentY();
                     hapticFeedback();
-                    settleSheetDrag(progress >= OPEN_DRAG_THRESHOLD);
+                    settleSheetDrag(finalPercent <= -100 * OPEN_DRAG_THRESHOLD);
                 }
                 else if (miniCurrentX > 80) {
                     hapticFeedback();
