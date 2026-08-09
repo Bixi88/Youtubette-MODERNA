@@ -375,6 +375,29 @@
             -webkit-text-stroke: 2.5px var(--bg-gradient-top);
             paint-order: stroke fill;
         }
+        /* Dropdown sveglia: stessa animazione a "tendina" del pannello filtri (.filter-drop),
+           colori presi dalle variabili tema così segue automaticamente Moderna/Walkman/Frosted
+           senza bisogno di regole dedicate per ogni skin. */
+        .sleep-timer-drop {
+            background: var(--bg-card);
+            border-radius: 14px;
+            border: 1px solid var(--hair, rgba(243,239,230,0.08));
+            max-height: 0; opacity: 0; pointer-events: none;
+            transition: max-height 0.32s cubic-bezier(0.16,1,0.3,1), opacity 0.24s ease;
+        }
+        .sleep-timer-drop.open {
+            max-height: 240px; opacity: 1; pointer-events: auto;
+        }
+        .sleep-timer-option {
+            padding: 10px 14px;
+            font-size: 12px;
+            color: var(--text-main);
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        .sleep-timer-option:hover, .sleep-timer-option:active {
+            background: rgba(255,255,255,0.06);
+        }
 
 
         /* --- STILI FILTRI CUSTOM DI RICERCA --- */
@@ -1211,12 +1234,12 @@
                         <button id="sleepTimerBtn" class="relative text-gray-400 active:scale-90 transition-colors text-[13px]" title="Sleep timer">
                             <i class="fa-solid fa-stopwatch" id="sleepTimerIcon"></i>
                         </button>
-                        <div id="sleepTimerMenu" class="hidden absolute bottom-full right-0 mb-2 w-32 rounded-xl bg-[#121212] border border-white/10 shadow-2xl z-50 overflow-hidden">
-                            <div class="sleep-timer-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-minutes="10">10 min</div>
-                            <div class="sleep-timer-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-minutes="30">30 min</div>
-                            <div class="sleep-timer-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-minutes="60">60 min</div>
-                            <div class="sleep-timer-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-minutes="120">120 min</div>
-                            <div class="sleep-timer-option px-4 py-2.5 text-xs text-white cursor-pointer hover:bg-white/5" data-minutes="240">240 min</div>
+                        <div id="sleepTimerMenu" class="sleep-timer-drop absolute bottom-full right-0 mb-2 w-32 z-50 overflow-hidden">
+                            <div class="sleep-timer-option" data-minutes="10">10 min</div>
+                            <div class="sleep-timer-option" data-minutes="30">30 min</div>
+                            <div class="sleep-timer-option" data-minutes="60">60 min</div>
+                            <div class="sleep-timer-option" data-minutes="120">120 min</div>
+                            <div class="sleep-timer-option" data-minutes="240">240 min</div>
                         </div>
                     </div>
                 </div>
@@ -1767,7 +1790,13 @@
 
             document.getElementById('sleepTimerBtn').addEventListener('click', (e) => {
                 e.stopPropagation();
-                toggleSleepTimerMenu();
+                // Acceso (timer già impostato): il click spegne subito, senza passare dal
+                // menu. Spento: il click apre/chiude solo la tendina delle durate.
+                if (sleepTimerHandle) {
+                    cancelSleepTimer();
+                } else {
+                    toggleSleepTimerMenu();
+                }
             });
             document.querySelectorAll('.sleep-timer-option').forEach((opt) => {
                 opt.addEventListener('click', () => setSleepTimer(parseInt(opt.dataset.minutes, 10)));
@@ -1775,7 +1804,7 @@
             document.addEventListener('click', (e) => {
                 const menu = document.getElementById('sleepTimerMenu');
                 const btn = document.getElementById('sleepTimerBtn');
-                if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !btn.contains(e.target)) {
+                if (menu && menu.classList.contains('open') && !menu.contains(e.target) && !btn.contains(e.target)) {
                     closeSleepTimerMenu();
                 }
             });
@@ -4456,11 +4485,19 @@
         }
 
         function toggleSleepTimerMenu() {
-            document.getElementById('sleepTimerMenu')?.classList.toggle('hidden');
+            document.getElementById('sleepTimerMenu')?.classList.toggle('open');
         }
 
         function closeSleepTimerMenu() {
-            document.getElementById('sleepTimerMenu')?.classList.add('hidden');
+            document.getElementById('sleepTimerMenu')?.classList.remove('open');
+        }
+
+        // Spegne un timer già attivo senza passare dal menu: premere di nuovo l'icona quando
+        // è accesa lo cancella subito, utile se è stato attivato per errore.
+        function cancelSleepTimer() {
+            if (sleepTimerHandle) clearTimeout(sleepTimerHandle);
+            sleepTimerHandle = null;
+            updateSleepTimerButtonUI();
         }
 
         // Selezionare una nuova durata sovrascrive sempre un timer già in corso (nessuna
