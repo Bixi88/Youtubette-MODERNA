@@ -224,6 +224,16 @@
             transition: none;
         }
 
+        /* Durante il trascinamento del dito sulla barra del minutaggio (grande o mini) la
+           larghezza va aggiornata ISTANTANEAMENTE: la transition-all/duration-100 che le due
+           barre hanno di default (per l'avanzamento "morbido" durante la riproduzione normale)
+           altrimenti anima ogni singolo aggiornamento inseguendo il dito con un ritardo fisso,
+           risultando a scatti quando si trascina velocemente. */
+        #progressBar.scrubbing,
+        #miniProgressBar.scrubbing {
+            transition: none !important;
+        }
+
         /* NOTA: qui prima esisteva un intero blocco CSS ("STRUTTURA DINAMICA BARRA DI
            RICERCA") ereditato dalla vecchia barra di ricerca a comparsa, con classe
            .search-container. Con il nuovo header stile mockup la barra è invece
@@ -315,6 +325,12 @@
         .custom-bg-accent { background-color: var(--accent); }
         .custom-border-accent { border-color: var(--accent); }
         .custom-text-muted { color: var(--text-muted); }
+
+        /* Pulsante repeat nella Now Playing sheet: grigio spento come prev/next quando
+           disattivo, colore accento del tema (coerente con custom-text-accent) quando attivo. */
+        #repeatBtn.active {
+            color: var(--accent);
+        }
 
         /* --- STILI FILTRI CUSTOM DI RICERCA --- */
         .filter-option {
@@ -1116,7 +1132,10 @@
                     </div>
                 </div>
 
-                <div class="flex items-center justify-center gap-8 mb-8">
+                <div class="relative flex items-center justify-center gap-8 mb-8">
+                    <button id="repeatBtn" class="absolute left-0 text-gray-400 active:scale-90 transition-colors text-[18px] p-2" title="Ripeti">
+                        <i class="fa-solid fa-repeat" id="repeatIcon"></i>
+                    </button>
                     <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step" id="prevIcon"></i></button>
                     <button id="playPauseBtn" class="w-[68px] h-[68px] rounded-full flex items-center justify-center text-[24px] shadow-2xl custom-bg-accent" style="color:#1a1305;">
                         <i class="fa-solid fa-play ml-1" id="playIcon"></i>
@@ -1452,7 +1471,7 @@
                 setPlayIconState(false);
                 updateMediaSessionState(false);
                 syncKeepAlive(false);
-                nextTrack();
+                handleTrackEnded();
             }
             // BUFFERING (3), UNSTARTED (-1), CUED (5): nessuna modifica all'icona.
         }
@@ -1500,6 +1519,7 @@
             setupFilterDropdowns();
             renderRecentHome();
             restoreLastPlayback();
+            updateRepeatButtonUI();
 
             document.body.classList.remove('hidden');
             window.history.replaceState({ page: 'main' }, 'Main');
@@ -1665,6 +1685,7 @@
 
             document.getElementById('prevBtn').addEventListener('click', prevTrack);
             document.getElementById('nextBtn').addEventListener('click', nextTrack);
+            document.getElementById('repeatBtn').addEventListener('click', toggleRepeat);
 
             document.getElementById('sheetDownloadBtn').addEventListener('click', redirectToDownload);
             document.getElementById('sheetHeaderCenter')?.addEventListener('click', openNowPlayingPlaylist);
@@ -2300,6 +2321,7 @@
             isScrubbing = true;
             activeScrubType = 'large';
             progressBar.classList.add('scrubbing');
+            miniProgressBar.classList.add('scrubbing');
             updateScrubPositionGeneral(e);
         }
 
@@ -2307,6 +2329,8 @@
             if (!player?.getDuration || nowPlayingIndex === -1) return;
             isScrubbing = true;
             activeScrubType = 'mini';
+            progressBar.classList.add('scrubbing');
+            miniProgressBar.classList.add('scrubbing');
             updateScrubPositionGeneral(e);
         }
 
@@ -2351,6 +2375,7 @@
             if (!isScrubbing) return;
             isScrubbing = false;
             progressBar.classList.remove('scrubbing');
+            miniProgressBar.classList.remove('scrubbing');
             progressTooltip.classList.add('hidden');
 
             const duration = player.getDuration() || 0;
@@ -4310,6 +4335,53 @@
             let prevIdx = nowPlayingIndex - 1;
             if (prevIdx < 0) prevIdx = nowPlayingTracks.length - 1;
             loadTrack(prevIdx, nowPlayingTracks);
+        }
+
+        // --- REPEAT ---
+        // Stato persistito: resta acceso/spento anche riaprendo l'app.
+        const REPEAT_KEY = 'youtubette_repeat_enabled';
+        let repeatEnabled = localStorage.getItem(REPEAT_KEY) === '1';
+
+        function updateRepeatButtonUI() {
+            const btn = document.getElementById('repeatBtn');
+            if (btn) btn.classList.toggle('active', repeatEnabled);
+        }
+
+        function toggleRepeat() {
+            repeatEnabled = !repeatEnabled;
+            localStorage.setItem(REPEAT_KEY, repeatEnabled ? '1' : '0');
+            updateRepeatButtonUI();
+        }
+
+        // Chiamata SOLO quando il video finisce da solo (evento ENDED), non quando l'utente
+        // preme manualmente "avanti": lo skip manuale con prevBtn/nextBtn deve continuare a
+        // scorrere/avvolgere la coda a prescindere dal repeat, che riguarda solo cosa succede
+        // "naturalmente" alla fine dell'ultimo brano (o dell'unico, per una ricerca singola).
+        function handleTrackEnded() {
+            if (nowPlayingTracks.length === 0) return;
+            const nextIdx = nowPlayingIndex + 1;
+
+            if (nextIdx < nowPlayingTracks.length) {
+                // Non è l'ultimo brano della coda: si avanza normalmente, il repeat non c'entra.
+                loadTrack(nextIdx, nowPlayingTracks);
+                return;
+            }
+
+            // Siamo alla fine della coda (playlist o singola canzone cercata).
+            if (nowPlayingTracks === appState.tracks && nextSearchPageToken) {
+                // Altri risultati di ricerca disponibili: si continua a paginare come prima,
+                // indipendentemente dal repeat (non è davvero "fine playlist").
+                performSearch(true).then(() => { if (appState.tracks[nextIdx]) loadTrack(nextIdx, appState.tracks); });
+                return;
+            }
+
+            if (repeatEnabled) {
+                // Riparte dalla prima canzone della coda: se la coda ha un solo brano
+                // (ricerca singola), questo equivale a far ripartire lo stesso brano.
+                loadTrack(0, nowPlayingTracks);
+            }
+            // Repeat spento: non si fa nulla, la riproduzione resta ferma sull'ultimo brano
+            // (icona già impostata su "play" da onPlayerStateChange).
         }
 
         function startProgressLoop() {
