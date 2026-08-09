@@ -379,6 +379,12 @@
            sale dal basso. Sfondo completamente opaco con --bg-main (a differenza di
            .settings-sheet/.glass-panel qui sopra, che sono semitrasparenti/sfocati) così
            segue il colore pieno di ogni skin invece di lasciar trasparire quello sotto. */
+        /* Nota: qui NON usiamo "opacity" sul contenitore, perché opacity si applica anche
+           ai figli (quindi anche alla .sleep-timer-sheet, che pure ha uno sfondo pieno)
+           facendo apparire la sheet trasparente per tutta la durata del fade-in, opaca
+           solo a fine animazione. Animando invece "background-color" (solo il velo scuro
+           dietro), la sheet resta sempre completamente opaca fin da subito, dato che è
+           comunque nascosta fuori schermo da translateY(100%) quando non è .active. */
         .sleep-timer-modal {
             position: fixed;
             inset: 0;
@@ -386,17 +392,16 @@
             display: flex;
             align-items: flex-end;
             justify-content: center;
-            background: rgba(0, 0, 0, 0.55);
-            opacity: 0;
+            background: rgba(0, 0, 0, 0);
             visibility: hidden;
             pointer-events: none;
-            transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+            transition: background-color 0.3s ease, visibility 0s linear 0.3s;
         }
         .sleep-timer-modal.active {
-            opacity: 1;
+            background: rgba(0, 0, 0, 0.55);
             visibility: visible;
             pointer-events: auto;
-            transition: opacity 0.3s ease, visibility 0s linear 0s;
+            transition: background-color 0.3s ease, visibility 0s linear 0s;
         }
         .sleep-timer-sheet {
             width: 100%;
