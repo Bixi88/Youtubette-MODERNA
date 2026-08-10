@@ -1569,75 +1569,31 @@
         };
         let deferredPrompt, nextSearchPageToken = '', isFetchingMore = false;
 
-        // --- SPOTIFY WEB API (Client Credentials flow) ---
-        // Se ID e Secret sono presenti, l'import playlist e le artwork passano dall'API
-        // ufficiale invece che dallo scraping della pagina embed + iTunes. Nota: essendo
-        // un'app statica senza backend, il Client Secret resta comunque visibile a chi
-        // ispeziona il sorgente: accettabile per uso personale, non andrebbe fatto per
-        // un'app pubblica (lì servirebbe un piccolo server che lo custodisce).
-        const SPOTIFY_CLIENT_ID = '00536c4113ea4f369f6f5b2f2e0d0977';
-        const SPOTIFY_CLIENT_SECRET = 'ff03da026d394038a7c7d680f563d27b';
-        let spotifyAccessToken = null;
-        let spotifyTokenExpiresAt = 0;
-
-        function hasSpotifyApiCreds() {
-            return !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET);
-        }
-
-        async function getSpotifyAccessToken() {
-            if (spotifyAccessToken && Date.now() < spotifyTokenExpiresAt) return spotifyAccessToken;
-            const res = await fetch('https://accounts.spotify.com/api/token', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Authorization': 'Basic ' + btoa(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`)
-                },
-                body: 'grant_type=client_credentials'
-            });
-            if (!res.ok) throw new Error('Token Spotify non ottenuto (' + res.status + ')');
-            const data = await res.json();
-            spotifyAccessToken = data.access_token;
-            // Un margine di 60s prima della scadenza reale, per non rischiare di usare
-            // un token appena scaduto per una richiesta che parte proprio al limite.
-            spotifyTokenExpiresAt = Date.now() + (data.expires_in - 60) * 1000;
-            return spotifyAccessToken;
-        }
-
-        // Scarica nome, copertina e tracklist completa (con paginazione, 100 brani a
-        // pagina) di una playlist pubblica tramite l'API ufficiale. Le copertine dei
-        // singoli brani (album.images) sono già pronte: niente iTunes per queste tracce.
-        async function fetchSpotifyPlaylistViaApi(playlistId) {
-            const token = await getSpotifyAccessToken();
-            const headers = { 'Authorization': `Bearer ${token}` };
-
-            const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,images`, { headers });
-            if (!metaRes.ok) throw new Error('Playlist Spotify non trovata (' + metaRes.status + ')');
-            const meta = await metaRes.json();
-
-            const tracks = [];
-            let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=next,items(track(name,artists(name),album(images)))`;
-            while (url) {
-                const res = await fetch(url, { headers });
-                if (!res.ok) throw new Error('Brani Spotify non ottenuti (' + res.status + ')');
-                const page = await res.json();
-                for (const item of (page.items || [])) {
-                    const t = item.track;
-                    if (!t) continue; // brano rimosso/non disponibile (es. locale, o non più su Spotify)
-                    const artwork = t.album?.images?.[0]?.url || null;
-                    tracks.push({
-                        title: t.name,
-                        artist: (t.artists || []).map(a => a.name).join(', '),
-                        thumbnail: artwork
-                    });
+        // --- PROXY CORS ---
+        // La pagina embed di Spotify (usata sotto per leggere le playlist) non concede
+        // CORS a chi la richiama da un altro dominio: serve quindi un proxy pubblico
+        // che la scarichi lui e ce la passi. Ne proviamo due in sequenza perché quelli
+        // gratuiti sono noti per un'affidabilità limitata da soli (~50%): se il primo
+        // non risponde o restituisce vuoto, si passa subito al secondo.
+        async function fetchViaCorsProxy(targetUrl) {
+            const buildProxyUrls = [
+                u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+                u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`
+            ];
+            let lastErr = null;
+            for (const build of buildProxyUrls) {
+                try {
+                    const res = await fetch(build(targetUrl));
+                    if (!res.ok) throw new Error('Proxy CORS non disponibile (' + res.status + ')');
+                    const text = await res.text();
+                    if (!text || text.length < 50) throw new Error('Risposta vuota dal proxy CORS.');
+                    return text;
+                } catch (err) {
+                    lastErr = err;
+                    console.warn('Proxy CORS fallito, provo il successivo:', err);
                 }
-                url = page.next || null;
             }
-
-            return {
-                name: meta.name || 'Playlist',
-                cover: meta.images?.[0]?.url || null,
-                tracks
-            };
+            throw lastErr || new Error('Nessun proxy CORS disponibile.');
         }
 
         // 'youtube' = lista da ricerca (con paginazione YouTube),
@@ -4067,11 +4023,44 @@
 
         // --- IMPORT PLAYLIST SPOTIFY ---
         // Niente API/chiave Spotify: leggiamo la pagina embed pubblica (open.spotify.com/embed/playlist/...),
-        // la stessa che genera i player incorporabili su siti terzi, che espone titolo/artista/durata dei
-        // brani già nell'HTML iniziale. Essendo una pagina non pensata per fetch da altri domini, serve un
-        // proxy CORS pubblico e gratuito per leggerla dal browser: ne proviamo due in sequenza.
+        // la stessa che genera i player incorporabili su siti terzi, che espone titolo/copertina/artista dei
+        // brani già nell'HTML iniziale (via fetchViaCorsProxy qui sopra, non essendo una pagina pensata per
+        // fetch da altri domini). Le artwork dei singoli brani NON sono in questa pagina (solo titolo+artista):
+        // arrivano temporaneamente da iTunes appena importata la playlist (vedi fetchTrackArtwork più sotto),
+        // e diventano definitive (miniatura YouTube, salvata in cache) al primo ascolto di ciascun brano.
         // NB: è scraping non ufficiale di una pagina non documentata da Spotify, quindi potrebbe smettere
-        // di funzionare se Spotify ne cambia la struttura, e mostra al più i primi ~100 brani della playlist.
+        // di funzionare se Spotify ne cambia la struttura, e mostra al più le prime ~100 tracce della playlist.
+
+        // Estrae nome, copertina e tracklist (titolo+artista) dalla pagina embed. Ci appoggiamo alla
+        // struttura semantica (una lista di righe, ciascuna con un titolo e - subito sotto - l'artista,
+        // come heading) invece che a classi CSS: sono molto più soggette a cambiare a ogni redesign
+        // della pagina rispetto ai ruoli/tag semantici usati per l'accessibilità.
+        async function fetchSpotifyEmbedPlaylist(playlistId) {
+            const html = await fetchViaCorsProxy(`https://open.spotify.com/embed/playlist/${playlistId}`);
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+
+            const name = doc.querySelector('meta[property="og:title"]')?.content
+                || doc.querySelector('title')?.textContent
+                || 'Playlist';
+            const cover = doc.querySelector('meta[property="og:image"]')?.content || null;
+
+            const rows = doc.querySelectorAll('ol li, [role="row"]');
+            const tracks = [];
+            rows.forEach(row => {
+                const headings = row.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]');
+                if (headings.length < 2) return; // riga senza titolo+artista: non è un brano (es. intestazione)
+                const title = headings[0].textContent.trim();
+                const artist = headings[1].textContent.trim();
+                if (!title || !artist) return;
+                tracks.push({ title, artist, thumbnail: null });
+            });
+
+            if (tracks.length === 0) {
+                throw new Error('Nessun brano trovato: playlist privata/vuota, oppure Spotify ha cambiato la struttura della pagina embed.');
+            }
+
+            return { name, cover, tracks };
+        }
 
         function extractSpotifyPlaylistId(url) {
             const match = url.match(/playlist[\/:]([a-zA-Z0-9]{15,25})/);
@@ -4160,22 +4149,16 @@
             if (resultsStatusText) resultsStatusText.classList.add('hidden');
 
             try {
-                if (!hasSpotifyApiCreds()) {
-                    throw new Error('Client ID/Secret Spotify non configurati.');
-                }
-
-                const apiResult = await fetchSpotifyPlaylistViaApi(playlistId);
-                const rawTracks = apiResult.tracks;
-                const meta = { name: apiResult.name, cover: apiResult.cover };
-
-                if (rawTracks.length === 0) {
-                    throw new Error('Nessun brano trovato: la playlist potrebbe essere privata, vuota o non più raggiungibile.');
-                }
+                const scraped = await fetchSpotifyEmbedPlaylist(playlistId);
+                const rawTracks = scraped.tracks;
+                const meta = { name: scraped.name, cover: scraped.cover };
 
                 // Per ogni brano controlliamo subito la cache locale: se lo abbiamo già
-                // risolto in passato (stesso titolo+artista), riusiamo id/copertina senza
-                // toccare la rete. La copertina arriva già dall'API Spotify insieme al
-                // brano; solo se manca (raro) verrà cercata di nuovo su Spotify al render.
+                // risolto/incontrato in passato (stesso titolo+artista), riusiamo id e/o
+                // copertina definitiva senza toccare la rete. La pagina embed non fornisce
+                // copertine per singolo brano: se non c'è nulla in cache, l'artwork parte
+                // vuota e viene riempita subito dopo (temporaneamente) da iTunes - vedi
+                // il ciclo di render più sotto.
                 appState.tracks = rawTracks.map(t => {
                     const cached = getCachedTrack(t.title, t.artist);
                     const thumbnail = t.thumbnail || cached?.thumbnail || null;
@@ -4221,37 +4204,54 @@
             }
         }
 
-        // Copertina per un singolo brano importato da Spotify, quando l'oggetto restituito
-        // dall'API playlist non aveva album.images valorizzato (capita per alcune voci):
-        // si ricerca di nuovo il brano con l'API di ricerca di Spotify.
-        async function fetchTrackArtworkFromSpotifySearch(track, index) {
-            try {
-                const token = await getSpotifyAccessToken();
-                const q = encodeURIComponent(`track:${track.title} artist:${track.channel}`);
-                const res = await fetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!res.ok) throw new Error('Ricerca Spotify fallita (' + res.status + ')');
-                const data = await res.json();
-                return data?.tracks?.items?.[0]?.album?.images?.[0]?.url || null;
-            } catch (err) {
-                console.warn('Ricerca artwork su Spotify fallita:', err);
-                return null;
-            }
+        // --- ARTWORK TEMPORANEA (iTunes Search API) ---
+        // L'API di ricerca iTunes (itunes.apple.com/search) non concede CORS a chi la
+        // chiama da un browser: l'unico modo per usarla lato client è JSONP (un tag
+        // <script> con parametro "callback" — non è una fetch/XHR, quindi CORS non si
+        // applica). Ogni chiamata usa un nome di callback univoco e un timeout, così lo
+        // <script> non resta mai orfano se iTunes non risponde in tempo.
+        let itunesJsonpCounter = 0;
+        function fetchItunesArtworkJSONP(title, artist, timeoutMs = 6000) {
+            return new Promise((resolve) => {
+                const callbackName = `__itunesJsonp${Date.now()}_${itunesJsonpCounter++}`;
+                let script = null;
+                const cleanup = () => {
+                    delete window[callbackName];
+                    if (script) script.remove();
+                    clearTimeout(timer);
+                };
+                const timer = setTimeout(() => { cleanup(); resolve(null); }, timeoutMs);
+                window[callbackName] = (data) => {
+                    cleanup();
+                    const artwork = data?.results?.[0]?.artworkUrl100 || null;
+                    // iTunes fornisce di default una miniatura 100x100: troppo piccola per
+                    // il now-playing a schermo intero. Sostituendo questa porzione dell'URL
+                    // si ottiene la stessa immagine in versione 600x600.
+                    resolve(artwork ? artwork.replace('100x100bb', '600x600bb') : null);
+                };
+                const term = encodeURIComponent(`${title} ${artist}`);
+                script = document.createElement('script');
+                script.src = `https://itunes.apple.com/search?term=${term}&media=music&entity=song&limit=1&callback=${callbackName}`;
+                script.onerror = () => { cleanup(); resolve(null); };
+                document.head.appendChild(script);
+            });
         }
 
+        // Copertina TEMPORANEA per un brano importato da Spotify (che non ha ancora un
+        // video YouTube risolto, quindi nessuna miniatura definitiva): usata solo per
+        // non lasciare il tondino vuoto/grigio subito dopo l'import. Non va MAI in cache
+        // qui apposta - resta valida solo per questa sessione - perché è una copertina di
+        // ripiego (iTunes a volte sbaglia risultato per brani ambigui/poco noti): quella
+        // vera arriva e viene salvata in cache al primo ascolto del brano, in
+        // resolveYoutubeIdForTrack più sotto, che la sostituisce.
         async function fetchTrackArtwork(track, index) {
             if (track.id || track.artworkFetched) return;
             track.artworkFetched = true;
-            const artwork = await fetchTrackArtworkFromSpotifySearch(track, index);
+            const artwork = await fetchItunesArtworkJSONP(track.title, track.channel);
             if (artwork && !track.id) {
                 track.thumbnail = artwork;
                 const img = document.getElementById(`track-img-${index}`);
                 if (img) img.src = artwork;
-                // Salva in cache: la prossima volta che questo brano compare in una
-                // playlist (anche diversa), la copertina è già pronta senza rifare
-                // la ricerca.
-                setCachedTrack(track.title, track.channel, { thumbnail: artwork });
             }
         }
 
@@ -4271,7 +4271,11 @@
             // aggiornamento serve sia in caso di hit sulla cache sia dopo una ricerca vera.
             function applyResolvedId(id, thumbnailUrl) {
                 track.id = id;
-                if (!track.thumbnail && thumbnailUrl) track.thumbnail = thumbnailUrl;
+                // Prima risoluzione vera del brano: la miniatura YouTube è quella
+                // DEFINITIVA e sostituisce sempre l'eventuale copertina temporanea di
+                // iTunes assegnata all'import (verrà salvata in cache poco sotto, insieme
+                // all'id, così resta pronta anche alla prossima apertura dell'app).
+                if (thumbnailUrl) track.thumbnail = thumbnailUrl;
                 track.resolved = true;
 
                 document.getElementById('apiErrorBadge')?.classList.add('hidden');
@@ -4284,11 +4288,8 @@
                 if (updateRowUI) {
                     const img = document.getElementById(`track-img-${index}`);
                     if (img) {
-                        if (track.spotifyImport) {
-                            // Copertina fissa (iTunes se trovata, altrimenti il ripiego YouTube
-                            // appena assegnato sopra): niente displayArtwork qui, altrimenti
-                            // verrebbe sovrascritta di nuovo con la miniatura del video.
-                            if (track.thumbnail) img.src = track.thumbnail;
+                        if (track.spotifyImport && track.thumbnail) {
+                            img.src = track.thumbnail;
                         } else {
                             displayArtwork(img, track.id);
                         }
@@ -4480,10 +4481,10 @@
 
             track.id = item.id;
             track.resolved = true;
-            // Per i brani importati da Spotify la copertina "vera" resta quella iTunes (se
-            // c'è): qui aggiorniamo la miniatura solo come ripiego, esattamente come fa già
-            // resolveYoutubeIdForTrack, per non far "saltare" la cover a video appena scelto.
-            if (!track.spotifyImport || !track.thumbnail) track.thumbnail = item.thumbnail;
+            // Stessa logica di resolveYoutubeIdForTrack: la copertina del video scelto è
+            // quella definitiva da qui in poi, e sostituisce sempre l'eventuale copertina
+            // temporanea di iTunes.
+            if (item.thumbnail) track.thumbnail = item.thumbnail;
 
             setCachedTrack(track.title, track.channel, { id: track.id, thumbnail: track.thumbnail });
             if (currentListSource === 'spotify' && currentLoadedKey && currentLoadedKey.startsWith('playlist:')) {
@@ -4736,8 +4737,10 @@
             const sheetImg = document.getElementById('sheetArtworkImg');
             const miniImg = document.getElementById('miniPlayerImg');
             if (track.spotifyImport) {
-                // Copertina iTunes fissa: non va mai sostituita dalla miniatura YouTube,
-                // altrimenti l'immagine "salta" proprio quando parte la canzone.
+                // track.thumbnail qui è già quella giusta per lo stato attuale del brano:
+                // temporanea (iTunes) se non ancora ascoltato, definitiva (YouTube) se sì -
+                // la sostituzione avviene una volta sola, al primo ascolto, in
+                // resolveYoutubeIdForTrack/applyCorrectedTrack.
                 const src = track.thumbnail || (track.id ? `https://img.youtube.com/vi/${track.id}/mqdefault.jpg` : '');
                 if (sheetImg) sheetImg.src = src;
                 if (miniImg) miniImg.src = src;
@@ -4807,8 +4810,9 @@
                 }
 
                 if (track.spotifyImport) {
-                    // Solo se non esisteva già una copertina iTunes: qui track.thumbnail
-                    // è già stato eventualmente valorizzato come ripiego da resolveYoutubeIdForTrack.
+                    // resolveYoutubeIdForTrack ha appena sostituito track.thumbnail con la
+                    // miniatura YouTube definitiva (o l'ha impostata per la prima volta, se
+                    // iTunes non aveva trovato nulla in fase di import).
                     const src = track.thumbnail || `https://img.youtube.com/vi/${track.id}/mqdefault.jpg`;
                     if (sheetImg) sheetImg.src = src;
                     if (miniImg) miniImg.src = src;
@@ -4844,8 +4848,9 @@
                 // Più risoluzioni = artwork più nitido nei controlli di sistema (notifica, lock screen,
                 // pannello rapido Android): è lì che Android disegna quello che sembra un "widget", perché
                 // un vero home-screen widget non è realizzabile da una webapp/PWA, richiede codice nativo.
-                // Per i brani da Spotify con copertina iTunes, la usiamo anche qui: stessa
-                // immagine ovunque, niente cambio a sorpresa nel lock screen.
+                // Per i brani importati da Spotify usiamo track.thumbnail (temporanea iTunes
+                // o definitiva YouTube, a seconda dello stato) anche qui: stessa immagine
+                // ovunque, niente cambio a sorpresa nel lock screen.
                 const artwork = (track.spotifyImport && track.thumbnail)
                     ? [{ src: track.thumbnail, sizes: '400x400', type: 'image/jpeg' }]
                     : [
