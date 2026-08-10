@@ -3844,6 +3844,10 @@
         // così le funzioni chiamanti non devono sapere quale delle tre fonti ha risposto.
         async function youtubeSearch(params) {
             const keys = [appState.apiKey, appState.apiKey2].filter(Boolean);
+            // Ultima risposta valida (nessun errore) incontrata, anche se con zero
+            // risultati: la teniamo da parte come ripiego finale, nel caso NESSUNA fonte
+            // trovi niente, invece di scartarla e basta.
+            let lastEmptyOkResponse = null;
 
             for (const key of keys) {
                 try {
@@ -3853,7 +3857,19 @@
                         // Chiamata riuscita = 100 unità addebitate per certo su questa chiave
                         // (non una stima): la registriamo subito nel contatore.
                         recordQuotaUsage(key);
-                        return data;
+                        // IMPORTANTE: una risposta "senza errori" non vuol dire "con
+                        // risultati". La ricerca ufficiale a volte non trova nulla per una
+                        // query dove una ricerca normale su youtube.com (quella del Worker
+                        // di backup più sotto) invece trova subito il video giusto. Prima
+                        // qui si tornava e basta al primo successo tecnico, anche vuoto,
+                        // saltando del tutto sia la chiave secondaria sia il Worker: quel
+                        // "Nessuna alternativa trovata" non era mai arrivato a provare le
+                        // altre due fonti. Ora, se è vuota, la teniamo da parte e proviamo
+                        // comunque la fonte successiva.
+                        if (data.items && data.items.length > 0) return data;
+                        lastEmptyOkResponse = data;
+                        console.warn('Chiave YouTube ha risposto senza errori ma zero risultati, provo la fonte successiva...');
+                        continue;
                     }
                     console.warn(isQuotaError(data)
                         ? 'Quota YouTube esaurita per una chiave, provo la successiva...'
@@ -3874,10 +3890,17 @@
                 const res = await fetch(url);
                 const data = await res.json();
                 if (data.error) throw new Error(data.error);
-                return data; // già normalizzato: {items:[...], nextPageToken}
+                if (data.items && data.items.length > 0) return data; // già normalizzato: {items:[...], nextPageToken}
+                console.warn('Anche il Worker di backup ha risposto senza errori ma zero risultati.');
             } catch (err) {
                 console.warn('Anche il Worker di backup ha fallito:', err);
             }
+
+            // Nessuna fonte ha trovato risultati: se almeno una ha risposto correttamente
+            // (anche vuota), la restituiamo com'è invece di far sembrare che TUTTE e 3 le
+            // fonti siano irraggiungibili (quello mostra un badge di errore diverso, non
+            // corretto in questo caso: qui hanno risposto, solo senza trovare nulla).
+            if (lastEmptyOkResponse) return lastEmptyOkResponse;
 
             return null; // tutte e tre le fonti hanno fallito
         }
