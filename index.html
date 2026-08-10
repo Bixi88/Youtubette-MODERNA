@@ -4151,11 +4151,49 @@
         // o non raggiungibile): pesca un brano a caso tra quelli della playlist e usa la sua
         // copertina iTunes. Tenta al massimo su qualche brano (ordine mischiato), non su tutti,
         // per non rallentare troppo l'import se molte ricerche iTunes falliscono.
+        // iTunes via JSONP (script tag + parametro "callback") invece di fetch(): l'endpoint
+        // itunes.apple.com/search non garantisce header CORS affidabili da browser mobile,
+        // per cui una fetch() diretta può fallire silenziosamente (finendo sempre nel catch)
+        // pur essendo l'API stessa raggiungibile. JSONP bypassa il problema perché non passa
+        // per XHR/fetch: il browser carica lo script come farebbe con qualsiasi <script src>.
+        let itunesJsonpCounter = 0;
+        function itunesSearchJSONP(term, timeoutMs = 6000) {
+            return new Promise((resolve) => {
+                const cbName = `itunesJsonpCb${Date.now()}_${itunesJsonpCounter++}`;
+                const script = document.createElement('script');
+                let done = false;
+                const cleanup = () => {
+                    delete window[cbName];
+                    script.remove();
+                    clearTimeout(timer);
+                };
+                window[cbName] = (data) => {
+                    if (done) return;
+                    done = true;
+                    cleanup();
+                    resolve(data);
+                };
+                const timer = setTimeout(() => {
+                    if (done) return;
+                    done = true;
+                    cleanup();
+                    resolve(null);
+                }, timeoutMs);
+                script.onerror = () => {
+                    if (done) return;
+                    done = true;
+                    cleanup();
+                    resolve(null);
+                };
+                script.src = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=1&entity=musicTrack&callback=${cbName}`;
+                document.head.appendChild(script);
+            });
+        }
+
         async function fetchItunesArtworkFor(title, artist) {
             try {
-                const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${title} ${artist}`)}&limit=1&entity=musicTrack`);
-                const data = await res.json();
-                return data.results && data.results[0] && data.results[0].artworkUrl100
+                const data = await itunesSearchJSONP(`${title} ${artist}`);
+                return data && data.results && data.results[0] && data.results[0].artworkUrl100
                     ? data.results[0].artworkUrl100.replace('100x100bb', '400x400bb')
                     : null;
             } catch (err) {
@@ -4285,9 +4323,8 @@
             if (track.id || track.artworkFetched) return;
             track.artworkFetched = true;
             try {
-                const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(`${track.title} ${track.channel}`)}&limit=1&entity=musicTrack`);
-                const data = await res.json();
-                const artwork = data.results && data.results[0] && data.results[0].artworkUrl100
+                const data = await itunesSearchJSONP(`${track.title} ${track.channel}`);
+                const artwork = data && data.results && data.results[0] && data.results[0].artworkUrl100
                     ? data.results[0].artworkUrl100.replace('100x100bb', '400x400bb')
                     : null;
                 if (artwork && !track.id) {
