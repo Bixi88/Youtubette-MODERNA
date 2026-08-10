@@ -4337,7 +4337,11 @@
                 // scartava il video corretto - es. sotto i 4 minuti - lasciando in cima
                 // qualcos'altro). Ora usiamo la STESSA query e la STESSA assenza di filtro
                 // di durata della ricerca manuale, così il risultato in cima coincide.
-                let data = await youtubeSearch({ q: query, maxResults: 1, videoCategoryId: '10' });
+                // Tolto anche videoCategoryId:'10' (categoria "Musica"): quel filtro richiede
+                // che il video sia stato taggato Musica da chi l'ha caricato, ma molti brani
+                // (specie upload minori/indipendenti) sono su YouTube con un'altra categoria
+                // e venivano scartati a monte pur essendo il video giusto.
+                let data = await youtubeSearch({ q: query, maxResults: 1 });
                 // Solo QUESTO è un vero problema di chiavi/API (nessuna delle 3 fonti ha risposto):
                 // mostra il badge di errore. Se invece l'API ha risposto ma semplicemente non c'è
                 // un video corrispondente a questo brano, non è un problema di chiave: niente badge,
@@ -4350,7 +4354,7 @@
                 // preso da Spotify) non combacia col canale reale su YouTube e la ricerca
                 // con quel nome non trova nulla, riproviamo con solo il titolo.
                 if (!data.items || data.items.length === 0) {
-                    const fallbackData = await youtubeSearch({ q: `${track.title} song`, maxResults: 1, videoCategoryId: '10' });
+                    const fallbackData = await youtubeSearch({ q: `${track.title} song`, maxResults: 1 });
                     if (fallbackData && fallbackData.items && fallbackData.items.length > 0) data = fallbackData;
                 }
                 if (!data.items || data.items.length === 0) throw new Error('Nessun video YouTube trovato per questo brano.');
@@ -4439,7 +4443,7 @@
             // identico motivo: query coerente, altrimenti le alternative proposte qui
             // soffrirebbero dello stesso problema (risultati sul marchio, non sulla canzone).
             const query = `${track.title} ${track.channel} song`;
-            let data = await youtubeSearch({ q: query, maxResults: 8, videoCategoryId: '10' });
+            let data = await youtubeSearch({ q: query, maxResults: 8 });
             if (!data) {
                 showVisualApiError();
                 throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
@@ -4450,7 +4454,7 @@
             // titolo, molto più permissivo.
             if (!data.items || data.items.length === 0) {
                 const fallbackQuery = `${track.title} song`;
-                const fallbackData = await youtubeSearch({ q: fallbackQuery, maxResults: 8, videoCategoryId: '10' });
+                const fallbackData = await youtubeSearch({ q: fallbackQuery, maxResults: 8 });
                 if (fallbackData && fallbackData.items && fallbackData.items.length > 0) data = fallbackData;
             }
             if (!data.items) return [];
