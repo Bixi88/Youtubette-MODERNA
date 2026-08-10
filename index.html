@@ -3809,13 +3809,32 @@
                 || /^spotify:playlist:[a-zA-Z0-9]{15,25}$/i.test(text);
         }
 
-        async function fetchSpotifyEmbedText(playlistId) {
+        async function fetchSpotifyEmbedText(playlistId, forceRefresh = false) {
             const embedUrl = `https://open.spotify.com/embed/playlist/${playlistId}`;
+
+            // Quando l'utente preme "aggiorna" NON basta rifare la richiesta: sia r.jina.ai
+            // che allorigins.win tengono una LORO cache lato server della pagina Spotify
+            // (indipendente dalla cache locale dell'app, che qui viene già bypassata da
+            // forceRefresh in importSpotifyPlaylist). Senza istruirli esplicitamente a
+            // ignorarla, il "refresh" continua a ricevere lo stesso snapshot già salvato
+            // e la playlist sembra non aggiornarsi mai, anche se una canzone è stata
+            // aggiunta/rimossa su Spotify nel frattempo.
+            const fetchOpts = forceRefresh ? { cache: 'no-store' } : {};
+            // Query di cache-busting: cambia l'URL richiesto ai due proxy così anche eventuali
+            // cache intermedie (CDN, browser) lato NOSTRA richiesta non riescono a riusare una
+            // risposta precedente.
+            const bust = forceRefresh ? `${embedUrl.includes('?') ? '&' : '?'}_cb=${Date.now()}` : '';
+            const embedUrlBusted = embedUrl + bust;
 
             // 1° tentativo: r.jina.ai, un "reader" pubblico gratuito che restituisce il
             // contenuto testuale/markdown già ripulito della pagina (nessuna chiave, CORS ok).
+            // Header ufficiale del servizio per saltare la sua cache interna: vedi
+            // https://github.com/jina-ai/reader (x-no-cache: true).
             try {
-                const res = await fetch(`https://r.jina.ai/${embedUrl}`);
+                const res = await fetch(`https://r.jina.ai/${embedUrlBusted}`, {
+                    ...fetchOpts,
+                    headers: forceRefresh ? { 'x-no-cache': 'true' } : {}
+                });
                 if (res.ok) {
                     const text = await res.text();
                     if (text && text.length > 200) return { type: 'text', data: text };
@@ -3824,7 +3843,7 @@
 
             // 2° tentativo: proxy CORS generico che restituisce l'HTML grezzo della pagina.
             try {
-                const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(embedUrl)}`);
+                const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(embedUrlBusted)}`, fetchOpts);
                 if (res.ok) {
                     const html = await res.text();
                     if (html && html.length > 200) return { type: 'html', data: html };
@@ -3991,7 +4010,7 @@
             if (resultsStatusText) resultsStatusText.classList.add('hidden');
 
             try {
-                const fetched = await fetchSpotifyEmbedText(playlistId);
+                const fetched = await fetchSpotifyEmbedText(playlistId, forceRefresh);
                 let rawTracks = fetched.type === 'text'
                     ? parseSpotifyTracksFromText(fetched.data)
                     : parseSpotifyTracksFromHtml(fetched.data);
