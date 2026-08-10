@@ -446,6 +446,88 @@
             background: rgba(255,255,255,0.06);
         }
 
+        /* Modal "Correggi canzone": stessa sheet (overlay, animazione, sfondo opaco) del
+           timer spegnimento qui sopra (.sleep-timer-modal/.sleep-timer-sheet, riusate tali
+           e quali), solo l'intestazione cambia: qui serve un pulsante indietro esplicito
+           (il timer si chiude solo toccando fuori) che fa scendere e nasconde la sheet. Il
+           titolo resta centrato con lo stesso trucco dello spacer invisibile già usato per
+           #repeatBtn/#repeatRightPlaceholder e per l'header della Now Playing sheet. */
+        .correct-song-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .correct-song-back {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            background: transparent;
+            border: none;
+            padding: 0;
+            cursor: pointer;
+            flex: 0 0 auto;
+        }
+        .correct-song-back:active { opacity: 0.6; }
+        .correct-song-title {
+            flex: 1;
+            min-width: 0;
+            text-align: center;
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .correct-song-spacer { width: 32px; flex: 0 0 auto; }
+
+        .correct-song-result {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 9px 4px;
+            cursor: pointer;
+            border-radius: 14px;
+            transition: background-color 0.15s ease;
+        }
+        .correct-song-result:active { background: rgba(255,255,255,0.06); }
+        .correct-song-result-thumb {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            overflow: hidden;
+            flex: 0 0 auto;
+            background-color: var(--bg-input);
+        }
+        .correct-song-result-thumb img { width: 100%; height: 100%; object-fit: cover; }
+        .correct-song-result-info { flex: 1; min-width: 0; }
+        .correct-song-result-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .correct-song-result-channel {
+            font-size: 12px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 2px;
+        }
+        .correct-song-status {
+            text-align: center;
+            padding: 28px 8px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
 
         /* --- STILI FILTRI CUSTOM DI RICERCA --- */
         .filter-option {
@@ -1348,6 +1430,23 @@
         </div>
     </div>
 
+    <!-- Modal Correggi Canzone: tenuta a pressione prolungata su una riga della lista
+         canzoni, mostra fino a 5 alternative trovate su YouTube per lo stesso brano. -->
+    <div id="correctSongModal" class="sleep-timer-modal">
+        <div class="sleep-timer-sheet">
+            <div class="sleep-timer-sheet-handle"></div>
+            <div class="correct-song-header">
+                <button id="correctSongBackBtn" class="correct-song-back" title="Indietro">
+                    <i class="fa-solid fa-chevron-down"></i>
+                </button>
+                <h3 class="correct-song-title">Correggi canzone</h3>
+                <div class="correct-song-spacer"></div>
+            </div>
+            <div class="sleep-timer-sheet-divider"></div>
+            <div id="correctSongResults"></div>
+        </div>
+    </div>
+
     <!-- Modal Impostazioni -->
     <div id="apiModal">
         <div class="settings-sheet glass-panel shadow-2xl relative">
@@ -1520,7 +1619,7 @@
         // Delega globale: fa vibrare al click/tap di qualunque pulsante o elemento cliccabile,
         // senza dover aggiungere una chiamata manuale ad ogni singolo handler esistente.
         document.addEventListener('click', (e) => {
-            if (e.target.closest('button, [role="button"], .track-row, .qcard, .settings-playlist-row, .settings-playlist-remove')) {
+            if (e.target.closest('button, [role="button"], .track-row, .qcard, .settings-playlist-row, .settings-playlist-remove, .correct-song-result')) {
                 hapticFeedback();
             }
         }, true);
@@ -1740,6 +1839,13 @@
                     sleepTimerModalEl.classList.remove('active');
                     handled = true;
                 }
+                // Modal "Correggi canzone": stessa priorità del timer, stesso motivo (può
+                // stare sopra la Now Playing o sopra la lista canzoni, va chiusa da sola).
+                const correctSongModalEl = document.getElementById('correctSongModal');
+                if (correctSongModalEl && correctSongModalEl.classList.contains('active')) {
+                    correctSongModalEl.classList.remove('active');
+                    handled = true;
+                }
                 if (!handled && nowPlayingSheet.classList.contains('expanded')) {
                     nowPlayingSheet.classList.remove('expanded');
                     nowPlayingSheet.style.transform = '';
@@ -1912,6 +2018,11 @@
             // Click sull'overlay (non sulla sheet) chiude, stesso pattern di #apiModal.
             document.getElementById('sleepTimerModal').addEventListener('click', (e) => {
                 if (e.target.id === 'sleepTimerModal') closeSleepTimerModal();
+            });
+
+            document.getElementById('correctSongBackBtn').addEventListener('click', closeCorrectSongModal);
+            document.getElementById('correctSongModal').addEventListener('click', (e) => {
+                if (e.target.id === 'correctSongModal') closeCorrectSongModal();
             });
 
             document.getElementById('sheetDownloadBtn').addEventListener('click', redirectToDownload);
@@ -4153,7 +4264,13 @@
             }
 
             try {
-                const data = await youtubeSearch({ q: query, maxResults: 1 });
+                // videoDuration:'medium' (4-20 minuti) esclude dal pool dei risultati i mix,
+                // le compilation e i video-fiume (es. "40 minuti"): un brano Spotify normale
+                // sta quasi sempre in questa fascia. Stesso identico costo di quota della
+                // ricerca di prima, cambia solo il filtro lato YouTube: niente chiamate in
+                // più. Risolve la maggior parte dei casi di "canzone sbagliata"; il resto si
+                // sistema a mano col tasto "Correggi canzone" (pressione prolungata sulla riga).
+                const data = await youtubeSearch({ q: query, maxResults: 1, videoDuration: 'medium' });
                 // Solo QUESTO è un vero problema di chiavi/API (nessuna delle 3 fonti ha risposto):
                 // mostra il badge di errore. Se invece l'API ha risposto ma semplicemente non c'è
                 // un video corrispondente a questo brano, non è un problema di chiave: niente badge,
@@ -4187,6 +4304,134 @@
                 showToast(`Impossibile trovare "${track.title}" su YouTube.`);
                 return false;
             }
+        }
+
+        // --- CORREGGI CANZONE: pressione prolungata su una riga della lista canzoni, mostra
+        // fino a 5 alternative YouTube per lo stesso brano (stessa query di
+        // resolveYoutubeIdForTrack, stesso filtro videoDuration:'medium') e permette di
+        // sostituire il video sbagliato con un tap, in tempo reale. ---
+        let correctSongContext = null; // { track, index, sourceTracks } della riga aperta
+
+        function openCorrectSongModal(track, index, sourceTracks) {
+            correctSongContext = { track, index, sourceTracks };
+            const modal = document.getElementById('correctSongModal');
+            if (!modal) return;
+            modal.classList.add('active');
+            window.history.pushState({ page: 'correctSong' }, 'CorrectSong');
+            renderCorrectSongStatus('Cerco alternative su YouTube...');
+            searchAlternativesForTrack(track).then(items => {
+                // Se nel frattempo l'utente ha chiuso il modal (o ne ha aperto un altro),
+                // questi risultati arrivano "in ritardo": non li mostriamo.
+                if (!correctSongContext || correctSongContext.track !== track) return;
+                if (!items || items.length === 0) {
+                    renderCorrectSongStatus('Nessuna alternativa trovata.');
+                    return;
+                }
+                renderCorrectSongResults(items);
+            }).catch(err => {
+                console.warn('Ricerca alternative fallita:', err);
+                if (!correctSongContext || correctSongContext.track !== track) return;
+                renderCorrectSongStatus('Ricerca non riuscita. Riprova più tardi.');
+            });
+        }
+
+        function closeCorrectSongModal() {
+            // Stesso pattern di closeSleepTimerModal(): se in cima allo stack c'è lo stato
+            // 'correctSong', lasciamo che sia popstate a rimuovere 'active' consumando quello
+            // stato con un back, invece di toglierlo "a mano" (altrimenti un back successivo
+            // salterebbe uno stato e chiuderebbe anche la vista sotto per errore).
+            if (window.history.state && window.history.state.page === 'correctSong') {
+                window.history.back();
+            } else {
+                document.getElementById('correctSongModal')?.classList.remove('active');
+            }
+            correctSongContext = null;
+        }
+
+        function renderCorrectSongStatus(message) {
+            const container = document.getElementById('correctSongResults');
+            if (container) container.innerHTML = `<div class="correct-song-status">${escapeHtml(message)}</div>`;
+        }
+
+        // Stesse 3 fonti (chiave primaria, secondaria, worker di backup) di youtubeSearch: qui
+        // chiediamo 5 risultati invece di 1, con lo stesso filtro videoDuration:'medium' usato
+        // dalla risoluzione automatica, così le alternative proposte non includono a loro volta
+        // mix/compilation lunghissime.
+        async function searchAlternativesForTrack(track) {
+            const query = `${track.title} ${track.channel}`;
+            const data = await youtubeSearch({ q: query, maxResults: 5, videoDuration: 'medium' });
+            if (!data) {
+                showVisualApiError();
+                throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
+            }
+            if (!data.items) return [];
+            return data.items.map(item => ({
+                id: item.id.videoId,
+                title: item.snippet.title,
+                channel: item.snippet.channelTitle,
+                thumbnail: item.snippet.thumbnails.high ? item.snippet.thumbnails.high.url : item.snippet.thumbnails.default.url
+            }));
+        }
+
+        function renderCorrectSongResults(items) {
+            const container = document.getElementById('correctSongResults');
+            if (!container) return;
+            container.innerHTML = items.map((item, i) => `
+                <div class="correct-song-result" data-i="${i}">
+                    <div class="correct-song-result-thumb"><img src="${item.thumbnail}" alt="" loading="lazy"></div>
+                    <div class="correct-song-result-info">
+                        <div class="correct-song-result-title">${escapeHtml(item.title)}</div>
+                        <div class="correct-song-result-channel">${escapeHtml(item.channel)}</div>
+                    </div>
+                </div>
+            `).join('');
+            container.querySelectorAll('.correct-song-result').forEach((row, i) => {
+                row.addEventListener('click', () => applyCorrectedTrack(items[i]));
+            });
+        }
+
+        // Sostituisce il video del brano con quello scelto: aggiorna l'oggetto in memoria, la
+        // cache (così la correzione resta valida anche riaprendo l'app o incontrando lo stesso
+        // brano in un'altra playlist), la riga a schermo e — se è proprio il brano in ascolto
+        // in questo momento — ricarica il player, così il cambio si sente subito, in tempo reale.
+        function applyCorrectedTrack(item) {
+            if (!correctSongContext) return;
+            const { track, index, sourceTracks } = correctSongContext;
+
+            track.id = item.id;
+            track.resolved = true;
+            // Per i brani importati da Spotify la copertina "vera" resta quella iTunes (se
+            // c'è): qui aggiorniamo la miniatura solo come ripiego, esattamente come fa già
+            // resolveYoutubeIdForTrack, per non far "saltare" la cover a video appena scelto.
+            if (!track.spotifyImport || !track.thumbnail) track.thumbnail = item.thumbnail;
+
+            setCachedTrack(track.title, track.channel, { id: track.id, thumbnail: track.thumbnail });
+            if (currentListSource === 'spotify' && currentLoadedKey && currentLoadedKey.startsWith('playlist:')) {
+                const plUrl = currentLoadedKey.slice('playlist:'.length);
+                updateCachedPlaylistTrack(plUrl, track.title, track.channel, { id: track.id, thumbnail: track.thumbnail });
+            }
+
+            // Riga a schermo: solo se appartiene alla lista attualmente mostrata (stesso
+            // controllo usato da loadTrack per updateRowUI).
+            if (sourceTracks === appState.tracks) {
+                const img = document.getElementById(`track-img-${index}`);
+                if (img) {
+                    if (track.spotifyImport && track.thumbnail) img.src = track.thumbnail;
+                    else displayArtwork(img, track.id);
+                }
+                const badge = img?.parentElement?.querySelector('.fa-spotify');
+                if (badge) badge.remove();
+            }
+
+            // Se questo è proprio il brano in ascolto adesso, ricarichiamo il player:
+            // loadTrack, con track.id già impostato, salta dritto a player.loadVideoById()
+            // con il video corretto.
+            if (nowPlayingTracks === sourceTracks && nowPlayingIndex === index) {
+                loadTrack(index, sourceTracks);
+            }
+
+            closeCorrectSongModal();
+            showToast('Canzone corretta.');
         }
 
         // --- NAVIGAZIONE ANIMATA TRA VISTA PLAYLIST E VISTA LISTA CANZONI ---
@@ -4264,7 +4509,33 @@
                         <p class="text-xs truncate mt-1 custom-text-muted font-medium">${escapeHtml(track.channel)}</p>
                     </div>
                 `;
+                // Pressione prolungata: apre "Correggi canzone" per questo brano (stesso
+                // identico pattern pointerdown/pointerup con guardia longPressFired già usato
+                // per il tasto cancella sulle card dei Recenti in home).
+                const LONG_PRESS_MS = 500;
+                let pressTimer = null;
+                let longPressFired = false;
+                const startPress = () => {
+                    longPressFired = false;
+                    pressTimer = setTimeout(() => {
+                        longPressFired = true;
+                        pressTimer = null;
+                        openCorrectSongModal(track, index, appState.tracks);
+                    }, LONG_PRESS_MS);
+                };
+                const cancelPress = () => {
+                    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+                };
+                trackRow.addEventListener('pointerdown', startPress);
+                trackRow.addEventListener('pointerup', cancelPress);
+                trackRow.addEventListener('pointerleave', cancelPress);
+                trackRow.addEventListener('pointercancel', cancelPress);
+                trackRow.addEventListener('contextmenu', (e) => e.preventDefault());
+
                 trackRow.addEventListener('click', () => {
+                    // Il click che segue naturalmente il rilascio dopo la pressione prolungata
+                    // non deve anche avviare la riproduzione del brano.
+                    if (longPressFired) { longPressFired = false; return; }
                     loadTrack(index);
                 });
                 trackListDiv.appendChild(trackRow);
