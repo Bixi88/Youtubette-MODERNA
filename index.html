@@ -1572,28 +1572,42 @@
         // --- PROXY CORS ---
         // La pagina embed di Spotify (usata sotto per leggere le playlist) non concede
         // CORS a chi la richiama da un altro dominio: serve quindi un proxy pubblico
-        // che la scarichi lui e ce la passi. Ne proviamo due in sequenza perché quelli
-        // gratuiti sono noti per un'affidabilità limitata da soli (~50%): se il primo
-        // non risponde o restituisce vuoto, si passa subito al secondo.
-        async function fetchViaCorsProxy(targetUrl) {
+        // che la scarichi lui e ce la passi. Li chiamiamo ENTRAMBI in parallelo fin da
+        // subito (non più uno alla volta in sequenza): i proxy gratuiti sono noti per
+        // un'affidabilità limitata (~50%) e, soprattutto, per essere lenti a tratti - se
+        // il primo semplicemente ci mette tanto a rispondere (non fallisce, è solo lento),
+        // provarli in sequenza significava restare fermi ad aspettarlo per intero prima
+        // di passare al secondo. Così invece vince chi risponde prima, e un timeout per
+        // parte evita che uno bloccato trascini l'attesa per un minuto intero.
+        async function fetchViaCorsProxy(targetUrl, timeoutMs = 10000) {
             const buildProxyUrls = [
                 u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
                 u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`
             ];
-            let lastErr = null;
-            for (const build of buildProxyUrls) {
-                try {
-                    const res = await fetch(build(targetUrl));
-                    if (!res.ok) throw new Error('Proxy CORS non disponibile (' + res.status + ')');
-                    const text = await res.text();
-                    if (!text || text.length < 50) throw new Error('Risposta vuota dal proxy CORS.');
-                    return text;
-                } catch (err) {
-                    lastErr = err;
-                    console.warn('Proxy CORS fallito, provo il successivo:', err);
-                }
+
+            const attempts = buildProxyUrls.map(build => {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), timeoutMs);
+                return fetch(build(targetUrl), { signal: controller.signal })
+                    .then(res => {
+                        if (!res.ok) throw new Error('Proxy CORS non disponibile (' + res.status + ')');
+                        return res.text();
+                    })
+                    .then(text => {
+                        if (!text || text.length < 50) throw new Error('Risposta vuota dal proxy CORS.');
+                        return text;
+                    })
+                    .finally(() => clearTimeout(timer));
+            });
+
+            try {
+                // Promise.any: restituisce il primo che va a buon fine, ignora gli altri
+                // (e i loro eventuali errori/timeout) non appena ne arriva uno valido.
+                return await Promise.any(attempts);
+            } catch (aggregateErr) {
+                console.warn('Tutti i proxy CORS hanno fallito:', aggregateErr);
+                throw new Error('Nessun proxy CORS disponibile.');
             }
-            throw lastErr || new Error('Nessun proxy CORS disponibile.');
         }
 
         // 'youtube' = lista da ricerca (con paginazione YouTube),
