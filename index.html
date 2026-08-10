@@ -741,7 +741,6 @@
         .track-row .text-xs { font-size:12.5px; }
         .track-row::after { content:''; position:absolute; left:64px; right:0; bottom:0; height:1px; background:rgba(243,239,230,0.08); }
         .track-row:last-child::after { display:none; }
-        .track-playing-badge { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:12px; background:rgba(0,0,0,.35); color:var(--accent); }
 
         /* ================= SKIN "WALKMAN" (opzionale, attivabile dalle Impostazioni) =================
            Ispirata ai lettori musicali hi-fi portatili: nero pieno, un argento freddo al posto
@@ -880,7 +879,6 @@
            il viola compare solo qui e sulla barra del minutaggio, come richiesto. */
         html.walkman { --walkman-highlight: #B392F5; }
         html.walkman .track-row.playing .custom-text-accent { color: var(--walkman-highlight) !important; }
-        html.walkman .track-playing-badge { color: var(--walkman-highlight) !important; }
 
         /* ---- Barra del minutaggio (miniplayer + now playing sheet), stesso viola ---- */
         html.walkman #progressBar,
@@ -999,7 +997,6 @@
            Non tocco --accent (resta il viola di pulsanti/progress bar), il nuovo colore compare
            solo qui dove il viola perdeva leggibilità sullo sfondo blu-teal. */
         html.frosted .track-row.playing .custom-text-accent { color: var(--frosted-highlight) !important; }
-        html.frosted .track-playing-badge { color: var(--frosted-highlight) !important; }
 
         /* Pannelli in vetro satinato: più saturazione/blur e bordo luminoso, per
            accentuare l'effetto "frosted" rispetto al blur standard delle altre skin. */
@@ -3813,7 +3810,15 @@
         }
 
         function buildGoogleApiUrl(key, params) {
-            let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&key=${key}`;
+            // Era presente &videoEmbeddable=true: richiede che il video sia "embeddabile"
+            // fuori da youtube.com. Alcuni canali (spesso etichette indipendenti) disattivano
+            // l'embedding sui loro caricamenti: il video resta perfettamente trovabile e
+            // guardabile su YouTube, ma questo filtro lo escludeva a priori dai risultati di
+            // ricerca, dando "nessun risultato" per brani che in realtà esistono e si trovano
+            // a mano in pochi secondi. Tolto: nel raro caso in cui un risultato scelto non
+            // parta per davvero (embedding disattivato), basta scegliere un'altra alternativa
+            // dalla lista in "Correggi canzone".
+            let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&key=${key}`;
             if (params.q) url += `&q=${encodeURIComponent(params.q)}`;
             if (params.maxResults) url += `&maxResults=${params.maxResults}`;
             if (params.videoDuration) url += `&videoDuration=${params.videoDuration}`;
@@ -4595,7 +4600,6 @@
                     <div class="w-13 h-13 rounded-full overflow-hidden shrink-0 flex items-center justify-center bg-neutral-800 relative track-thumb-wrap" style="width:52px;height:52px;">
                         <img id="track-img-${index}" src="${track.id ? `https://img.youtube.com/vi/${track.id}/mqdefault.jpg` : (track.thumbnail || '')}" class="w-full h-full object-cover track-thumb-img" alt="" onload="this.classList.add('loaded')">
                         ${!track.id ? '<i class="fa-brands fa-spotify absolute bottom-0.5 right-0.5 text-[10px] text-[var(--accent)] drop-shadow"></i>' : ''}
-                        ${isPlaying ? '<span class="track-playing-badge"><i class="fa-solid fa-volume-high"></i></span>' : ''}
                     </div>
                     <div class="flex-1 overflow-hidden">
                         <p class="text-sm font-bold truncate ${isPlaying ? 'custom-text-accent font-black' : 'text-white'}">${escapeHtml(track.title)}</p>
