@@ -4407,6 +4407,51 @@
             }
         }
 
+        // Copertina per un singolo brano importato da Spotify, quando l'oggetto restituito
+        // dall'API playlist non aveva album.images valorizzato (capita per alcune voci).
+        // Prima via: ricerca Spotify stessa (stessa fonte affidabile, niente proxy CORS).
+        // Solo se anche questa fallisce (o le chiavi API non sono configurate) si ripiega
+        // sull'API pubblica di iTunes tramite proxy CORS, meno affidabile.
+        async function fetchTrackArtworkFromSpotifySearch(track, index) {
+            try {
+                const token = await getSpotifyAccessToken();
+                const q = encodeURIComponent(`track:${track.title} artist:${track.channel}`);
+                const res = await fetch(`https://api.spotify.com/v1/search?q=${q}&type=track&limit=1`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) throw new Error('Ricerca Spotify fallita (' + res.status + ')');
+                const data = await res.json();
+                return data?.tracks?.items?.[0]?.album?.images?.[0]?.url || null;
+            } catch (err) {
+                console.warn('Ricerca artwork su Spotify fallita:', err);
+                return null;
+            }
+        }
+
+        async function fetchTrackArtwork(track, index) {
+            if (track.id || track.artworkFetched) return;
+            track.artworkFetched = true;
+            let artwork = null;
+            if (hasSpotifyApiCreds()) {
+                artwork = await fetchTrackArtworkFromSpotifySearch(track, index);
+            }
+            if (!artwork) {
+                const data = await itunesSearch(`${track.title} ${track.channel}`);
+                artwork = data && data.results && data.results[0] && data.results[0].artworkUrl100
+                    ? data.results[0].artworkUrl100.replace('100x100bb', '400x400bb')
+                    : null;
+            }
+            if (artwork && !track.id) {
+                track.thumbnail = artwork;
+                const img = document.getElementById(`track-img-${index}`);
+                if (img) img.src = artwork;
+                // Salva in cache: la prossima volta che questo brano compare in una
+                // playlist (anche diversa), la copertina è già pronta senza rifare
+                // la ricerca.
+                setCachedTrack(track.title, track.channel, { thumbnail: artwork });
+            }
+        }
+
         // Copertina per un singolo brano importato da Spotify, tramite l'API pubblica di
         // iTunes: nessuna chiave, nessuna quota YouTube coinvolta. Se il brano viene poi
         // risolto su YouTube (playTrack), la sua miniatura verrà sostituita da quella del video.
@@ -4802,10 +4847,11 @@
                         displayArtwork(img, track.id);
                     }, 0);
                 } else if (!track.artworkFetched) {
-                    // Copertina per il singolo brano tramite iTunes (gratis, senza chiave, CORS-friendly):
-                    // scaglionata per non sparare decine di richieste tutte insieme all'import.
+                    // Copertina per il singolo brano: prima ricerca Spotify (se configurata),
+                    // poi iTunes come ripiego. Scaglionata per non sparare decine di
+                    // richieste tutte insieme all'import.
                     const delay = Math.min(index - fromIndex, 40) * 90;
-                    setTimeout(() => fetchTrackArtworkFromItunes(track, index), delay);
+                    setTimeout(() => fetchTrackArtwork(track, index), delay);
                 }
             }
         }
