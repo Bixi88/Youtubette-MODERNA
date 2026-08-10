@@ -4151,48 +4151,45 @@
         // o non raggiungibile): pesca un brano a caso tra quelli della playlist e usa la sua
         // copertina iTunes. Tenta al massimo su qualche brano (ordine mischiato), non su tutti,
         // per non rallentare troppo l'import se molte ricerche iTunes falliscono.
-        // iTunes via JSONP (script tag + parametro "callback") invece di fetch(): l'endpoint
-        // itunes.apple.com/search non garantisce header CORS affidabili da browser mobile,
-        // per cui una fetch() diretta può fallire silenziosamente (finendo sempre nel catch)
-        // pur essendo l'API stessa raggiungibile. JSONP bypassa il problema perché non passa
-        // per XHR/fetch: il browser carica lo script come farebbe con qualsiasi <script src>.
-        let itunesJsonpCounter = 0;
-        function itunesSearchJSONP(term, timeoutMs = 6000) {
-            return new Promise((resolve) => {
-                const cbName = `itunesJsonpCb${Date.now()}_${itunesJsonpCounter++}`;
-                const script = document.createElement('script');
-                let done = false;
-                const cleanup = () => {
-                    delete window[cbName];
-                    script.remove();
-                    clearTimeout(timer);
-                };
-                window[cbName] = (data) => {
-                    if (done) return;
-                    done = true;
-                    cleanup();
-                    resolve(data);
-                };
-                const timer = setTimeout(() => {
-                    if (done) return;
-                    done = true;
-                    cleanup();
-                    resolve(null);
-                }, timeoutMs);
-                script.onerror = () => {
-                    if (done) return;
-                    done = true;
-                    cleanup();
-                    resolve(null);
-                };
-                script.src = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=1&entity=musicTrack&callback=${cbName}`;
-                document.head.appendChild(script);
-            });
+        // iTunes tramite un proxy CORS pubblico (allorigins.win) invece di fetch() diretta
+        // o JSONP: entrambe le vie dirette verso itunes.apple.com/search si sono rivelate
+        // inaffidabili (l'endpoint non garantisce sempre CORS né il parametro "callback"
+        // per il JSONP). Il proxy fa la richiesta lato server e ce la restituisce incartata
+        // in { contents: "<json come stringa>" }, aggirando così il limite del browser.
+        async function fetchJsonWithTimeout(url, timeoutMs) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const res = await fetch(url, { signal: controller.signal });
+                return await res.json();
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        // Due proxy in sequenza: allorigins.win è gratuito ma non sempre disponibile (down o
+        // rate-limit), quindi se fallisce (o restituisce contenuto vuoto) si tenta subito con
+        // corsproxy.io come ripiego, prima di arrendersi per questo brano.
+        async function itunesSearch(term, timeoutMs = 8000) {
+            const target = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=1&entity=musicTrack`;
+            try {
+                const wrapper = await fetchJsonWithTimeout(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}`, timeoutMs);
+                if (wrapper && wrapper.contents) return JSON.parse(wrapper.contents);
+            } catch (err) {
+                console.warn('itunesSearch: allorigins fallito:', err);
+            }
+            try {
+                const data = await fetchJsonWithTimeout(`https://corsproxy.io/?url=${encodeURIComponent(target)}`, timeoutMs);
+                if (data) return data;
+            } catch (err) {
+                console.warn('itunesSearch: corsproxy fallito:', err);
+            }
+            return null;
         }
 
         async function fetchItunesArtworkFor(title, artist) {
             try {
-                const data = await itunesSearchJSONP(`${title} ${artist}`);
+                const data = await itunesSearch(`${title} ${artist}`);
                 return data && data.results && data.results[0] && data.results[0].artworkUrl100
                     ? data.results[0].artworkUrl100.replace('100x100bb', '400x400bb')
                     : null;
@@ -4323,7 +4320,7 @@
             if (track.id || track.artworkFetched) return;
             track.artworkFetched = true;
             try {
-                const data = await itunesSearchJSONP(`${track.title} ${track.channel}`);
+                const data = await itunesSearch(`${track.title} ${track.channel}`);
                 const artwork = data && data.results && data.results[0] && data.results[0].artworkUrl100
                     ? data.results[0].artworkUrl100.replace('100x100bb', '400x400bb')
                     : null;
