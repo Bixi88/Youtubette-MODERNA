@@ -169,6 +169,16 @@
         .track-row-enter {
             animation: trackRowIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
         }
+        /* La pressione prolungata su una riga apre "Correggi canzone" (vedi renderTracklist):
+           senza queste regole, tenere premuto sul titolo/artista (testo normale, non protetto
+           dalla regola globale valida solo per button/a/[role=button]/i) fa scattare la
+           selezione nativa del testo del browser, che copre l'interfaccia e impedisce di
+           vedere/usare quello che il tap prolungato doveva aprire. */
+        .track-row, .track-row * {
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-touch-callout: none;
+        }
 
         /* Mini Player: Vetro satinato dinamico perfettamente integrato con l'estetica dell'app */
         .glass-panel {
@@ -680,7 +690,8 @@
         /* ================= HOME: griglia "Recenti" ================= */
         .quick-eyebrow { padding:22px 6px 4px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-muted); font-weight:600; }
         .quick-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:22px 14px; padding:14px 4px 20px; }
-        .qcard { display:flex; flex-direction:column; align-items:center; gap:9px; cursor:pointer; }
+        .qcard { display:flex; flex-direction:column; align-items:center; gap:9px; cursor:pointer; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+        .qcard * { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
         .qcard:active { transform:scale(0.96); }
         .qcard .circle { width:100%; aspect-ratio:1/1; border-radius:50%; background-size:calc(var(--artwork-zoom) * 100%); background-position:center; background-color:var(--bg-input); position:relative; box-shadow:0 10px 22px -8px rgba(0,0,0,.5); overflow:hidden; }
         .qcard.latest .circle { box-shadow:0 0 0 3px var(--accent), 0 10px 22px -8px rgba(0,0,0,.5); }
@@ -4212,7 +4223,11 @@
         // al massimo 1 chiamata di ricerca per ogni brano effettivamente ascoltato, non 100
         // chiamate subito all'import.
         async function resolveYoutubeIdForTrack(track, index, updateRowUI = true) {
-            const query = `${track.title} ${track.channel}`;
+            // "song" in coda alla query: senza questa parola, un titolo/artista che coincide
+            // (anche solo parzialmente) con un marchio noto - es. "Flower Chanel." come artista
+            // - fa sì che YouTube privilegi contenuti su quel marchio (sfilate, pubblicità)
+            // invece della canzone vera. Aggiungerla è la differenza tra i due casi.
+            const query = `${track.title} ${track.channel} song`;
 
             // Applica un id YouTube (video già trovato, in cache o via nuova ricerca) al
             // brano e aggiorna l'interfaccia: fattorizzato perché lo stesso identico
@@ -4358,7 +4373,10 @@
         // dalla risoluzione automatica, così le alternative proposte non includono a loro volta
         // mix/compilation lunghissime.
         async function searchAlternativesForTrack(track) {
-            const query = `${track.title} ${track.channel}`;
+            // Stessa aggiunta di "song" vista in resolveYoutubeIdForTrack, per lo stesso
+            // identico motivo: query coerente, altrimenti le alternative proposte qui
+            // soffrirebbero dello stesso problema (risultati sul marchio, non sulla canzone).
+            const query = `${track.title} ${track.channel} song`;
             const data = await youtubeSearch({ q: query, maxResults: 5, videoDuration: 'medium' });
             if (!data) {
                 showVisualApiError();
