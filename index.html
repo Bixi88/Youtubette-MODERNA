@@ -1568,6 +1568,78 @@
             filterDuration: 'any'
         };
         let deferredPrompt, nextSearchPageToken = '', isFetchingMore = false;
+
+        // --- SPOTIFY WEB API (Client Credentials flow) ---
+        // Se ID e Secret sono presenti, l'import playlist e le artwork passano dall'API
+        // ufficiale invece che dallo scraping della pagina embed + iTunes. Nota: essendo
+        // un'app statica senza backend, il Client Secret resta comunque visibile a chi
+        // ispeziona il sorgente: accettabile per uso personale, non andrebbe fatto per
+        // un'app pubblica (lì servirebbe un piccolo server che lo custodisce).
+        const SPOTIFY_CLIENT_ID = '00536c4113ea4f369f6f5b2f2e0d0977';
+        const SPOTIFY_CLIENT_SECRET = 'ff03da026d394038a7c7d680f563d27b';
+        let spotifyAccessToken = null;
+        let spotifyTokenExpiresAt = 0;
+
+        function hasSpotifyApiCreds() {
+            return !!(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET);
+        }
+
+        async function getSpotifyAccessToken() {
+            if (spotifyAccessToken && Date.now() < spotifyTokenExpiresAt) return spotifyAccessToken;
+            const res = await fetch('https://accounts.spotify.com/api/token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': 'Basic ' + btoa(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`)
+                },
+                body: 'grant_type=client_credentials'
+            });
+            if (!res.ok) throw new Error('Token Spotify non ottenuto (' + res.status + ')');
+            const data = await res.json();
+            spotifyAccessToken = data.access_token;
+            // Un margine di 60s prima della scadenza reale, per non rischiare di usare
+            // un token appena scaduto per una richiesta che parte proprio al limite.
+            spotifyTokenExpiresAt = Date.now() + (data.expires_in - 60) * 1000;
+            return spotifyAccessToken;
+        }
+
+        // Scarica nome, copertina e tracklist completa (con paginazione, 100 brani a
+        // pagina) di una playlist pubblica tramite l'API ufficiale. Le copertine dei
+        // singoli brani (album.images) sono già pronte: niente iTunes per queste tracce.
+        async function fetchSpotifyPlaylistViaApi(playlistId) {
+            const token = await getSpotifyAccessToken();
+            const headers = { 'Authorization': `Bearer ${token}` };
+
+            const metaRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}?fields=name,images`, { headers });
+            if (!metaRes.ok) throw new Error('Playlist Spotify non trovata (' + metaRes.status + ')');
+            const meta = await metaRes.json();
+
+            const tracks = [];
+            let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&fields=next,items(track(name,artists(name),album(images)))`;
+            while (url) {
+                const res = await fetch(url, { headers });
+                if (!res.ok) throw new Error('Brani Spotify non ottenuti (' + res.status + ')');
+                const page = await res.json();
+                for (const item of (page.items || [])) {
+                    const t = item.track;
+                    if (!t) continue; // brano rimosso/non disponibile (es. locale, o non più su Spotify)
+                    const artwork = t.album?.images?.[0]?.url || null;
+                    tracks.push({
+                        title: t.name,
+                        artist: (t.artists || []).map(a => a.name).join(', '),
+                        thumbnail: artwork
+                    });
+                }
+                url = page.next || null;
+            }
+
+            return {
+                name: meta.name || 'Playlist',
+                cover: meta.images?.[0]?.url || null,
+                tracks
+            };
+        }
+
         // 'youtube' = lista da ricerca (con paginazione YouTube),
         // 'spotify' = lista importata da una playlist Spotify (brani senza id YouTube
         // finché non vengono riprodotti la prima volta).
@@ -4205,6 +4277,9 @@
                 [pool[i], pool[j]] = [pool[j], pool[i]];
             }
             for (const t of pool.slice(0, 5)) {
+                // Se il brano ha già una copertina (es. arrivata dall'API Spotify), usiamo
+                // subito quella: niente bisogno di interrogare iTunes in questo caso.
+                if (t.thumbnail) return t.thumbnail;
                 const artwork = await fetchItunesArtworkFor(t.title, t.artist);
                 if (artwork) return artwork;
             }
@@ -4254,10 +4329,28 @@
             if (resultsStatusText) resultsStatusText.classList.add('hidden');
 
             try {
-                const fetched = await fetchSpotifyEmbedText(playlistId, forceRefresh);
-                let rawTracks = fetched.type === 'text'
-                    ? parseSpotifyTracksFromText(fetched.data)
-                    : parseSpotifyTracksFromHtml(fetched.data);
+                let rawTracks, meta;
+
+                if (hasSpotifyApiCreds()) {
+                    // Via API ufficiale: playlist e brani in un colpo solo, copertine già incluse.
+                    try {
+                        const apiResult = await fetchSpotifyPlaylistViaApi(playlistId);
+                        rawTracks = apiResult.tracks;
+                        meta = { name: apiResult.name, cover: apiResult.cover };
+                    } catch (apiErr) {
+                        console.warn('API Spotify fallita, ripiego sullo scraping embed:', apiErr);
+                    }
+                }
+
+                if (!rawTracks) {
+                    // Ripiego: pagina embed pubblica (nessuna chiave API configurata, o
+                    // l'API ufficiale ha fallito per qualche motivo).
+                    const fetched = await fetchSpotifyEmbedText(playlistId, forceRefresh);
+                    rawTracks = fetched.type === 'text'
+                        ? parseSpotifyTracksFromText(fetched.data)
+                        : parseSpotifyTracksFromHtml(fetched.data);
+                    meta = extractSpotifyPlaylistMeta(fetched);
+                }
 
                 if (rawTracks.length === 0) {
                     throw new Error('Nessun brano trovato: la playlist potrebbe essere privata, vuota o non più raggiungibile.');
@@ -4267,15 +4360,17 @@
                 // risolto in passato (stesso titolo+artista), riusiamo id/copertina senza
                 // toccare la rete. Solo i brani MAI incontrati prima restano "vuoti" e
                 // verranno cercati su iTunes/YouTube come al solito (iTunes al render,
-                // YouTube solo quando l'utente li riproduce davvero).
+                // YouTube solo quando l'utente li riproduce davvero). Se la copertina è
+                // già arrivata dall'API Spotify, la teniamo così com'è (niente iTunes).
                 appState.tracks = rawTracks.map(t => {
                     const cached = getCachedTrack(t.title, t.artist);
+                    const thumbnail = t.thumbnail || cached?.thumbnail || null;
                     return {
                         id: cached?.id || null,
                         title: t.title,
                         channel: t.artist,
-                        thumbnail: cached?.thumbnail || null,
-                        artworkFetched: !!(cached?.thumbnail || cached?.id),
+                        thumbnail,
+                        artworkFetched: !!(thumbnail || cached?.id),
                         resolved: !!cached?.id,
                         spotifyImport: true
                     };
@@ -4285,7 +4380,6 @@
                 if (resultsStatusText) resultsStatusText.classList.add('hidden');
                 renderTracklist(0);
 
-                const meta = extractSpotifyPlaylistMeta(fetched);
                 const cleanName = cleanSpotifyPlaylistName(meta.name);
                 showResultsView(cleanName);
                 currentLoadedKey = 'playlist:' + url;
