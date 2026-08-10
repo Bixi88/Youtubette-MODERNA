@@ -983,6 +983,17 @@
            indaco-violetto chiaro al posto del viola cupo. */
         html.frosted .qcard.latest .circle { box-shadow: 0 0 0 3px var(--frosted-highlight); border-color: transparent; }
         html.frosted .qcard.latest .name { color: var(--frosted-highlight); }
+        /* La X per rimuovere una card dai "Recenti" (playlist incluse) usa di default
+           background: var(--accent) + colore var(--bg-main): in Frosted --accent è il
+           viola #8B2FD9 e --bg-main è un blu scuro, quindi icona scura su sfondo viola
+           scuro, poco leggibile su questo tema in vetro. Qui sostituiamo con lo stesso
+           trattamento "vetro chiaro" usato per gli altri pulsanti tondi della skin. */
+        html.frosted .qcard .qcard-delete {
+            background: rgba(255,255,255,0.28);
+            color: #F5F7FA;
+            border: 1px solid rgba(255,255,255,0.38);
+            box-shadow: 0 4px 10px rgba(0,0,0,.35);
+        }
 
         /* ---- Highlight indaco-violetto nella lista (titolo + badge della traccia in riproduzione) ----
            Non tocco --accent (resta il viola di pulsanti/progress bar), il nuovo colore compare
