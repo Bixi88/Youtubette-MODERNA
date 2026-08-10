@@ -3818,7 +3818,15 @@
             // a mano in pochi secondi. Tolto: nel raro caso in cui un risultato scelto non
             // parta per davvero (embedding disattivato), basta scegliere un'altra alternativa
             // dalla lista in "Correggi canzone".
-            let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&key=${key}`;
+            //
+            // &safeSearch=none: senza impostarlo esplicitamente, l'API usa il default
+            // "moderate", che filtra i risultati considerati "sensibili" in base anche al
+            // TITOLO del video (non solo al contenuto vero e proprio). Un titolo come
+            // "Sextape" ci rientra in pieno: il video resta perfettamente visibile e
+            // trovabile su youtube.com (che non applica questo filtro), ma spariva del tutto
+            // da questa ricerca. "none" = nessun filtro aggiuntivo lato nostro (restano
+            // comunque tutte le restrizioni per età/regione già decise da YouTube stesso).
+            let url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&safeSearch=none&key=${key}`;
             if (params.q) url += `&q=${encodeURIComponent(params.q)}`;
             if (params.maxResults) url += `&maxResults=${params.maxResults}`;
             if (params.videoDuration) url += `&videoDuration=${params.videoDuration}`;
