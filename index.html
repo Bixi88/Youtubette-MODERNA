@@ -1591,9 +1591,17 @@
                 return fetch(build(targetUrl), { signal: controller.signal })
                     .then(res => {
                         if (!res.ok) throw new Error('Proxy CORS non disponibile (' + res.status + ')');
-                        return res.text();
+                        return res.arrayBuffer();
                     })
-                    .then(text => {
+                    .then(buffer => {
+                        // Decodifica FORZATA in UTF-8, senza fidarsi del charset dichiarato
+                        // dal proxy (alcuni, come corsproxy.io, lo dichiarano in modo
+                        // inconsistente o assente): con res.text() il browser può decodificare
+                        // come Latin-1/Windows-1252, producendo titoli/artisti con accenti e
+                        // apostrofi "sporcati" (mojibake) - invisibili nella tracklist ma che
+                        // mandano a vuoto sia la ricerca artwork su iTunes sia il match con la
+                        // cache dei brani già risolti.
+                        const text = new TextDecoder('utf-8').decode(buffer);
                         if (!text || text.length < 50) throw new Error('Risposta vuota dal proxy CORS.');
                         return text;
                     })
@@ -2815,10 +2823,21 @@
         // tempo reale. Lo teniamo in memoria dopo la prima lettura.
         let trackCacheMemory = null;
 
-        // Chiave normalizzata: minuscolo, spazi compattati, per far combaciare piccole
-        // differenze di maiuscole/spazi tra import diversi dello stesso brano.
+        // Chiave normalizzata: minuscolo, spazi compattati, Unicode composto (NFC) e
+        // diacritici rimossi, per far combaciare piccole differenze di maiuscole/spazi/
+        // accenti tra import diversi dello stesso brano - incluse le variazioni di
+        // encoding tra i due proxy CORS usati per leggere la pagina embed Spotify
+        // (es. "é" composto da un proxy, "e" + accento separato dall'altro, o un
+        // apostrofo tipografico "’" al posto di quello dritto "'").
         function trackCacheKey(title, channel) {
-            const norm = s => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+            const norm = s => (s || '').toString()
+                .normalize('NFC')
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, ' ')
+                .normalize('NFKD')
+                .replace(/[\u0300-\u036f]/g, '') // toglie i diacritici scomposti da NFKD
+                .replace(/[\u2018\u2019\u02bc]/g, "'"); // apostrofi tipografici -> apostrofo dritto
             return `${norm(title)}|||${norm(channel)}`;
         }
 
