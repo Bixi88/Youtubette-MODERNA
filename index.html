@@ -618,6 +618,23 @@
             25% { transform: rotate(-2deg); }
             75% { transform: rotate(2deg); }
         }
+        /* Cornice grigia per tutte le artwork del tema Moderna (quello di base, senza skin
+           Walkman/Frosted attiva): stesso trattamento della skin Frosted (bordo su card
+           Recenti, playlist recenti in Impostazioni, miniplayer, now playing e sul
+           CONTENITORE della thumbnail nella lista canzoni), ma nel grigio di questo tema
+           (--text-muted) invece del bianco/lavanda delle altre skin. */
+        html:not(.walkman):not(.frosted) .qcard .circle,
+        html:not(.walkman):not(.frosted) .settings-playlist-thumb,
+        html:not(.walkman):not(.frosted) #miniPlayerImg {
+            border: 2.5px solid rgba(139, 135, 148, 0.55);
+        }
+        html:not(.walkman):not(.frosted) #sheetArtworkFrame {
+            border: 4px solid rgba(139, 135, 148, 0.5);
+        }
+        html:not(.walkman):not(.frosted) .track-thumb-wrap {
+            background-color: rgba(139, 135, 148, 0.16);
+            border: 2.5px solid rgba(139, 135, 148, 0.55);
+        }
 
         .empty-home { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:60px 30px 0; gap:12px; }
         .empty-home i { font-size:26px; color:var(--text-muted); opacity:.6; }
@@ -649,19 +666,29 @@
            risultati di ricerca, playlist recenti nel menu impostazioni, miniplayer e now playing. */
         html.walkman .qcard .circle,
         html.walkman .settings-playlist-thumb,
-        html.walkman #miniPlayerImg,
-        html.walkman #sheetArtworkFrame,
-        html.walkman .track-thumb-img {
+        html.walkman #miniPlayerImg {
             border-radius: 50% !important;
             box-shadow: none;
-            border: 1px solid rgba(240,240,242,0.18);
+            border: 2.5px solid rgba(255,255,255,0.55);
+        }
+        /* Cornice bianca "a vetro" come nella skin Frosted: sul grande artwork della Now
+           Playing sheet è leggermente più spessa, coerente col trattamento Frosted. */
+        html.walkman #sheetArtworkFrame {
+            border-radius: 50% !important;
+            box-shadow: none;
+            border: 4px solid rgba(255,255,255,0.5);
         }
         /* Il contenitore della thumbnail nella lista canzoni ha un suo squircle (rounded-[24%])
            che "inquadra" l'immagine: va reso cerchio anche lui, altrimenti resta visibile
-           dietro al cerchio dell'immagine. */
+           dietro al cerchio dell'immagine. Bordo spostato sul CONTENITORE (.track-thumb-wrap)
+           anziché sull'<img>, come nella skin Frosted, così resta pulito qualunque sia lo
+           stato di caricamento della copertina (fallback grigio scuro coperto dal bordo). */
         html.walkman .track-thumb-wrap {
             border-radius: 50% !important;
+            background-color: rgba(240,240,242,0.10);
+            border: 2.5px solid rgba(255,255,255,0.55);
         }
+        html.walkman .track-thumb-img { border-radius: 50% !important; }
         /* Cornice ed evidenziazione della card "più recente": stesso viola usato per la
            barra del minutaggio (--walkman-highlight), non più il bianco/argento di --accent,
            per restare coerente con l'unico accento colorato di questa skin. */
@@ -1162,7 +1189,7 @@
                 <!-- VISTA 2: Lista Canzoni (risultati ricerca / playlist aperta) -->
                 <div id="resultsView" class="shrink-0 h-full overflow-y-auto pr-0">
                     <p id="resultsStatusText" class="hidden text-xs p-8 italic text-center mt-12 custom-text-muted"></p>
-                    <div id="trackList" class="pb-36 px-6"></div>
+                    <div id="trackList" class="pb-36 px-6 pt-4"></div>
                 </div>
             </div>
         </section>
@@ -1180,7 +1207,7 @@
     </main>
 
     <!-- Mini Player -->
-    <div id="miniPlayer" class="fixed bottom-4 left-4 right-4 h-28 rounded-3xl glass-panel shadow-2xl z-40 flex flex-col justify-center p-3 select-none cursor-pointer" style="touch-action: none;">
+    <div id="miniPlayer" class="fixed bottom-4 left-4 right-4 h-[76px] rounded-3xl glass-panel shadow-2xl z-40 flex flex-col justify-center px-3 py-1.5 select-none cursor-pointer" style="touch-action: none;">
         
         <div id="miniPlayerContent" class="flex items-center justify-between w-full flex-1 min-w-0 mb-0.5">
             <div class="flex items-center flex-1 min-w-0 mr-4 h-11 overflow-hidden" id="miniPlayerDetails">
@@ -3466,11 +3493,11 @@
             const toast = document.createElement('div');
             toast.id = 'youtubette-exit-toast';
             // Se il mini player è visibile, il popup va appoggiato sopra di lui (16px di
-            // margine dal fondo + 112px di altezza del mini player + 12px di distacco),
+            // margine dal fondo + 76px di altezza del mini player + 12px di distacco),
             // altrimenti resta semplicemente vicino al fondo come una notifica normale.
             const isMiniPlayerVisible = miniPlayer && miniPlayer.classList.contains('visible');
             toast.style.bottom = isMiniPlayerVisible
-                ? 'calc(140px + env(safe-area-inset-bottom, 0px))'
+                ? 'calc(104px + env(safe-area-inset-bottom, 0px))'
                 : 'calc(14px + env(safe-area-inset-bottom, 0px))';
             toast.style.fontFamily = "'Inter', sans-serif";
             toast.className = 'fixed left-3 right-3 font-medium text-sm py-3 px-4 rounded-lg z-[150] transition-all duration-300 opacity-0 translate-y-2 glass-panel text-center text-[var(--text-main)]';
