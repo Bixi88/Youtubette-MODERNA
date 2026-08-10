@@ -328,10 +328,10 @@
 
         /* Pulsante repeat nella Now Playing sheet: dimensione fissa e tonda così, da spento,
            ha la stessa "ingombro" del suo gemello invisibile a destra (mantiene la simmetria
-           attorno a play/pause). */
+           attorno a play/pause). Dimensioni +30% rispetto all'originale (25px -> 32.5px). */
         #repeatBtn, #repeatRightPlaceholder {
-            width: 25px;
-            height: 25px;
+            width: 32.5px;
+            height: 32.5px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -350,15 +350,16 @@
         }
         #repeatBtn.active #repeatIcon {
             color: var(--accent);
-            -webkit-text-stroke: 2.5px var(--bg-gradient-top);
+            -webkit-text-stroke: 3.25px var(--bg-gradient-top);
             paint-order: stroke fill;
         }
 
         /* Sleep timer: stesse identiche caratteristiche del pulsante repeat qui sopra
-           (ingombro, outline "ritagliato" da attivo), icona sveglia invece che repeat. */
+           (ingombro, outline "ritagliato" da attivo), icona sveglia invece che repeat.
+           Dimensioni +30% rispetto all'originale (25px -> 32.5px), in coppia con repeatBtn. */
         #sleepTimerBtn {
-            width: 25px;
-            height: 25px;
+            width: 32.5px;
+            height: 32.5px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -372,7 +373,7 @@
         }
         #sleepTimerBtn.active #sleepTimerIcon {
             color: var(--accent);
-            -webkit-text-stroke: 2.5px var(--bg-gradient-top);
+            -webkit-text-stroke: 3.25px var(--bg-gradient-top);
             paint-order: stroke fill;
         }
         /* Sleep timer: bottom sheet a piena larghezza (stile Spotify), overlay + sheet che
@@ -1309,7 +1310,7 @@
                 </div>
 
                 <div class="flex items-center justify-center gap-5 mb-8">
-                    <button id="repeatBtn" class="relative text-gray-400 active:scale-90 transition-colors text-[13px]" title="Ripeti">
+                    <button id="repeatBtn" class="relative text-gray-400 active:scale-90 transition-colors text-[17px]" title="Ripeti">
                         <i class="fa-solid fa-repeat" id="repeatIcon"></i>
                     </button>
                     <button id="prevBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-backward-step" id="prevIcon"></i></button>
@@ -1319,7 +1320,7 @@
                     <button id="nextBtn" class="text-gray-400 active:text-[var(--text-main)] hover:text-[var(--text-main)] transition-colors text-[24px] p-2 active:scale-90"><i class="fa-solid fa-forward-step" id="nextIcon"></i></button>
                     <!-- Sleep timer: stessa "ingombro" ed estetica del pulsante repeat (vedi CSS
                          #repeatBtn/#sleepTimerBtn), mantiene play/pause perfettamente centrato. -->
-                    <button id="sleepTimerBtn" class="relative text-gray-400 active:scale-90 transition-colors text-[13px]" title="Sleep timer">
+                    <button id="sleepTimerBtn" class="relative text-gray-400 active:scale-90 transition-colors text-[17px]" title="Sleep timer">
                         <i class="fa-solid fa-stopwatch" id="sleepTimerIcon"></i>
                     </button>
                 </div>
