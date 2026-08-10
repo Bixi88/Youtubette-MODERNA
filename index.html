@@ -1013,6 +1013,18 @@
             background: rgba(255,255,255,0.18);
             border: 1px solid rgba(255,255,255,0.25);
         }
+        /* La X per rimuovere una playlist ereditava --text-muted, che su questo vetro
+           satinato (blur+saturate sopra lo sfondo blu/viola Frosted) risultava scura e
+           poco leggibile. Colore esplicito chiaro/bianco e sfondo del pulsante un po'
+           più opaco, per staccarsi nettamente dal vetro dietro. */
+        html.frosted .settings-playlist-remove {
+            color: #F5F7FA;
+            background: rgba(255,255,255,0.28);
+            border: 1px solid rgba(255,255,255,0.38);
+        }
+        html.frosted .settings-playlist-remove:active {
+            color: var(--frosted-highlight);
+        }
         /* Titolo playlist in cima alla lista canzoni: stesso indaco-violetto chiaro
            usato per il brano in riproduzione, invece del bianco piatto di default. */
         html.frosted .results-header .rt { color: var(--frosted-highlight); }
@@ -4281,13 +4293,15 @@
             }
 
             try {
-                // videoDuration:'medium' (4-20 minuti) esclude dal pool dei risultati i mix,
-                // le compilation e i video-fiume (es. "40 minuti"): un brano Spotify normale
-                // sta quasi sempre in questa fascia. Stesso identico costo di quota della
-                // ricerca di prima, cambia solo il filtro lato YouTube: niente chiamate in
-                // più. Risolve la maggior parte dei casi di "canzone sbagliata"; il resto si
-                // sistema a mano col tasto "Correggi canzone" (pressione prolungata sulla riga).
-                const data = await youtubeSearch({ q: query, maxResults: 1, videoDuration: 'medium', videoCategoryId: '10' });
+                // In precedenza qui c'era un filtro videoDuration:'medium' (4-20 minuti) che
+                // NON viene applicato nella ricerca manuale di "Correggi canzone"
+                // (searchAlternativesForTrack): erano quindi due ricerche diverse con due
+                // pool di risultati diversi, ed è per questo che il primo risultato "a mano"
+                // era quasi sempre quello giusto mentre quello automatico no (il filtro
+                // scartava il video corretto - es. sotto i 4 minuti - lasciando in cima
+                // qualcos'altro). Ora usiamo la STESSA query e la STESSA assenza di filtro
+                // di durata della ricerca manuale, così il risultato in cima coincide.
+                let data = await youtubeSearch({ q: query, maxResults: 1, videoCategoryId: '10' });
                 // Solo QUESTO è un vero problema di chiavi/API (nessuna delle 3 fonti ha risposto):
                 // mostra il badge di errore. Se invece l'API ha risposto ma semplicemente non c'è
                 // un video corrispondente a questo brano, non è un problema di chiave: niente badge,
@@ -4295,6 +4309,13 @@
                 if (!data) {
                     showVisualApiError();
                     throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
+                }
+                // Stesso fallback della ricerca manuale: se il nome canale salvato (spesso
+                // preso da Spotify) non combacia col canale reale su YouTube e la ricerca
+                // con quel nome non trova nulla, riproviamo con solo il titolo.
+                if (!data.items || data.items.length === 0) {
+                    const fallbackData = await youtubeSearch({ q: `${track.title} song`, maxResults: 1, videoCategoryId: '10' });
+                    if (fallbackData && fallbackData.items && fallbackData.items.length > 0) data = fallbackData;
                 }
                 if (!data.items || data.items.length === 0) throw new Error('Nessun video YouTube trovato per questo brano.');
 
