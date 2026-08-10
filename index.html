@@ -3010,17 +3010,21 @@
             }
         }
 
-        // Ritorna la playlist in cache solo se non scaduta, altrimenti null (si rifà la fetch).
+        // Ritorna la playlist in cache solo se non scaduta E con almeno un brano,
+        // altrimenti null (si rifà la fetch). La guardia sui brani protegge da eventuali
+        // voci corrotte salvate in passato con lista vuota, che altrimenti resterebbero
+        // bloccate in cache fino a scadenza naturale mostrando sempre "Nessun risultato".
         function getCachedPlaylistTracks(url) {
             const cache = loadPlaylistTracksCache();
             const entry = cache[url];
             if (!entry) return null;
             if (Date.now() - (entry.ts || 0) > PLAYLIST_TRACKS_CACHE_TTL_MS) return null;
+            if (!entry.tracks || entry.tracks.length === 0) return null;
             return entry;
         }
 
         function setCachedPlaylistTracks(url, { name, artwork = null, tracks }) {
-            if (!url || !tracks) return;
+            if (!url || !tracks || tracks.length === 0) return;
             const cache = loadPlaylistTracksCache();
             cache[url] = { name, artwork, tracks, ts: Date.now() };
 
@@ -4079,121 +4083,6 @@
                 || /^spotify:playlist:[a-zA-Z0-9]{15,25}$/i.test(text);
         }
 
-        async function fetchSpotifyEmbedText(playlistId, forceRefresh = false) {
-            const embedUrl = `https://open.spotify.com/embed/playlist/${playlistId}`;
-
-            // Quando l'utente preme "aggiorna" NON basta rifare la richiesta: sia r.jina.ai
-            // che allorigins.win tengono una LORO cache lato server della pagina Spotify
-            // (indipendente dalla cache locale dell'app, che qui viene già bypassata da
-            // forceRefresh in importSpotifyPlaylist). Senza istruirli esplicitamente a
-            // ignorarla, il "refresh" continua a ricevere lo stesso snapshot già salvato
-            // e la playlist sembra non aggiornarsi mai, anche se una canzone è stata
-            // aggiunta/rimossa su Spotify nel frattempo.
-            const fetchOpts = forceRefresh ? { cache: 'no-store' } : {};
-            // Query di cache-busting: cambia l'URL richiesto ai due proxy così anche eventuali
-            // cache intermedie (CDN, browser) lato NOSTRA richiesta non riescono a riusare una
-            // risposta precedente.
-            const bust = forceRefresh ? `${embedUrl.includes('?') ? '&' : '?'}_cb=${Date.now()}` : '';
-            const embedUrlBusted = embedUrl + bust;
-
-            // 1° tentativo: r.jina.ai, un "reader" pubblico gratuito che restituisce il
-            // contenuto testuale/markdown già ripulito della pagina (nessuna chiave, CORS ok).
-            // Header ufficiale del servizio per saltare la sua cache interna: vedi
-            // https://github.com/jina-ai/reader (x-no-cache: true).
-            try {
-                const res = await fetch(`https://r.jina.ai/${embedUrlBusted}`, {
-                    ...fetchOpts,
-                    headers: forceRefresh ? { 'x-no-cache': 'true' } : {}
-                });
-                if (res.ok) {
-                    const text = await res.text();
-                    if (text && text.length > 200) return { type: 'text', data: text };
-                }
-            } catch (err) { console.warn('r.jina.ai non disponibile:', err); }
-
-            // 2° tentativo: proxy CORS generico che restituisce l'HTML grezzo della pagina.
-            try {
-                const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(embedUrlBusted)}`, fetchOpts);
-                if (res.ok) {
-                    const html = await res.text();
-                    if (html && html.length > 200) return { type: 'html', data: html };
-                }
-            } catch (err) { console.warn('allorigins.win non disponibile:', err); }
-
-            throw new Error('Impossibile raggiungere Spotify: nessun proxy disponibile in questo momento.');
-        }
-
-        // Il badge "contenuto esplicito" (icona con la sola lettera E) che Spotify mostra
-        // sui brani con testo esplicito, durante l'estrazione della pagina finisce incollato
-        // davanti al nome dell'artista invece di essere scartato come icona: "Lele Blade"
-        // diventa "E Lele Blade". Una "E" isolata (token a sé, seguito da spazio) SEMPRE e
-        // SOLO come primo "artista" non è mai un vero nome d'arte, quindi si può scartare in
-        // sicurezza: non tocca nomi come "Ed Sheeran" o "Eminem", che non hanno lo spazio
-        // subito dopo la "E".
-        function stripSpotifyExplicitBadge(artist) {
-            return (artist || '').replace(/^E\s+(?=\S)/, '').trim() || artist;
-        }
-
-        function parseSpotifyTracksFromText(text) {
-            // Pattern osservato sulla pagina embed pubblica: titolo del brano come intestazione
-            // di livello 3, artista subito sotto come intestazione di livello 4, poi la durata mm:ss.
-            const tracks = [];
-            const re = /###\s+([^\n#][^\n]*)\n+####\s+([^\n#][^\n]*)\n+\s*(\d{1,3}:\d{2})/g;
-            let m;
-            while ((m = re.exec(text)) !== null) {
-                tracks.push({ title: m[1].trim(), artist: stripSpotifyExplicitBadge(m[2].trim()), duration: m[3].trim() });
-            }
-            return tracks;
-        }
-
-        function parseSpotifyTracksFromHtml(html) {
-            // Fallback più fragile ma indipendente dal reader esterno: analizza l'HTML grezzo
-            // cercando le coppie di intestazioni h3 (titolo) / h4 (artista) presenti nella riga.
-            try {
-                const doc = new DOMParser().parseFromString(html, 'text/html');
-                const tracks = [];
-                doc.querySelectorAll('h3').forEach(h3 => {
-                    const container = h3.closest('li') || h3.parentElement;
-                    const h4 = container ? container.querySelector('h4') : null;
-                    if (h4) tracks.push({ title: h3.textContent.trim(), artist: stripSpotifyExplicitBadge(h4.textContent.trim()), duration: '' });
-                });
-                return tracks;
-            } catch (err) {
-                console.warn('Parsing HTML playlist fallito:', err);
-                return [];
-            }
-        }
-
-        function extractSpotifyPlaylistCover(text) {
-            const match = text.match(/!\[[^\]]*\]\((https:\/\/[^\)\s]+)\)/);
-            return match ? match[1] : null;
-        }
-
-        // Ricava nome e copertina della playlist dalla risposta già scaricata per i brani
-        // (nessuna richiesta aggiuntiva), gestendo sia il formato testo/markdown di r.jina.ai
-        // sia il fallback HTML grezzo.
-        function extractSpotifyPlaylistMeta(fetched) {
-            let name = null, cover = null;
-            if (fetched.type === 'text') {
-                const titleMatch = fetched.data.match(/^Title:\s*(.+)$/m);
-                const h1Match = fetched.data.match(/^#\s+([^\n#][^\n]*)/m);
-                name = (titleMatch && titleMatch[1].trim()) || (h1Match && h1Match[1].trim()) || null;
-                cover = extractSpotifyPlaylistCover(fetched.data);
-            } else {
-                try {
-                    const doc = new DOMParser().parseFromString(fetched.data, 'text/html');
-                    const titleTag = doc.querySelector('title');
-                    if (titleTag) name = titleTag.textContent.replace(/\s*[|\-–]\s*Spotify.*$/i, '').trim();
-                    const ogImage = doc.querySelector('meta[property="og:image"]');
-                    const firstImg = doc.querySelector('img');
-                    cover = (ogImage && ogImage.getAttribute('content')) || (firstImg && firstImg.src) || null;
-                } catch (err) {
-                    console.warn('Impossibile estrarre nome/copertina playlist:', err);
-                }
-            }
-            return { name: name || 'Playlist', cover };
-        }
-
         // Nome "pulito" della playlist: le pagine Spotify aggiungono spesso, dopo il nome
         // vero, un riferimento all'autore/creatore (es. "Nome - playlist by Autore",
         // "Nome - Autore", "Nome by Autore") e la dicitura "Spotify". Li scartiamo
@@ -4219,71 +4108,13 @@
             return cleanSpotifyPlaylistName(name).split(/\s+/).slice(0, 3).join(' ');
         }
 
-        // Copertina di ripiego per una playlist Spotify senza cover propria (og:image assente
-        // o non raggiungibile): pesca un brano a caso tra quelli della playlist e usa la sua
-        // copertina iTunes. Tenta al massimo su qualche brano (ordine mischiato), non su tutti,
-        // per non rallentare troppo l'import se molte ricerche iTunes falliscono.
-        // iTunes tramite un proxy CORS pubblico (allorigins.win) invece di fetch() diretta
-        // o JSONP: entrambe le vie dirette verso itunes.apple.com/search si sono rivelate
-        // inaffidabili (l'endpoint non garantisce sempre CORS né il parametro "callback"
-        // per il JSONP). Il proxy fa la richiesta lato server e ce la restituisce incartata
-        // in { contents: "<json come stringa>" }, aggirando così il limite del browser.
-        async function fetchJsonWithTimeout(url, timeoutMs) {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), timeoutMs);
-            try {
-                const res = await fetch(url, { signal: controller.signal });
-                return await res.json();
-            } finally {
-                clearTimeout(timer);
-            }
-        }
-
-        // Due proxy in sequenza: allorigins.win è gratuito ma non sempre disponibile (down o
-        // rate-limit), quindi se fallisce (o restituisce contenuto vuoto) si tenta subito con
-        // corsproxy.io come ripiego, prima di arrendersi per questo brano.
-        async function itunesSearch(term, timeoutMs = 8000) {
-            const target = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=1&entity=musicTrack`;
-            try {
-                const wrapper = await fetchJsonWithTimeout(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}`, timeoutMs);
-                if (wrapper && wrapper.contents) return JSON.parse(wrapper.contents);
-            } catch (err) {
-                console.warn('itunesSearch: allorigins fallito:', err);
-            }
-            try {
-                const data = await fetchJsonWithTimeout(`https://corsproxy.io/?url=${encodeURIComponent(target)}`, timeoutMs);
-                if (data) return data;
-            } catch (err) {
-                console.warn('itunesSearch: corsproxy fallito:', err);
-            }
-            return null;
-        }
-
-        async function fetchItunesArtworkFor(title, artist) {
-            try {
-                const data = await itunesSearch(`${title} ${artist}`);
-                return data && data.results && data.results[0] && data.results[0].artworkUrl100
-                    ? data.results[0].artworkUrl100.replace('100x100bb', '400x400bb')
-                    : null;
-            } catch (err) {
-                return null;
-            }
-        }
-
-        async function pickRandomPlaylistArtwork(rawTracks) {
-            const pool = [...rawTracks];
-            for (let i = pool.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [pool[i], pool[j]] = [pool[j], pool[i]];
-            }
-            for (const t of pool.slice(0, 5)) {
-                // Se il brano ha già una copertina (es. arrivata dall'API Spotify), usiamo
-                // subito quella: niente bisogno di interrogare iTunes in questo caso.
-                if (t.thumbnail) return t.thumbnail;
-                const artwork = await fetchItunesArtworkFor(t.title, t.artist);
-                if (artwork) return artwork;
-            }
-            return null;
+        // Copertina di ripiego per una playlist Spotify senza cover propria: pesca un
+        // brano a caso tra quelli della playlist e usa la sua copertina (già arrivata
+        // dall'API Spotify insieme al brano).
+        function pickRandomPlaylistArtwork(rawTracks) {
+            const withArt = rawTracks.filter(t => t.thumbnail);
+            if (withArt.length === 0) return null;
+            return withArt[Math.floor(Math.random() * withArt.length)].thumbnail;
         }
 
         async function importSpotifyPlaylist(url, forceRefresh = false) {
@@ -4302,7 +4133,7 @@
             }
 
             // Playlist già aperta di recente (entro PLAYLIST_TRACKS_CACHE_TTL_MS): la
-            // ricarichiamo di peso dalla cache locale, senza toccare né Spotify né YouTube.
+            // ricarichiamo di peso dalla cache locale, senza toccare Spotify.
             const cachedPlaylist = forceRefresh ? null : getCachedPlaylistTracks(url);
             if (cachedPlaylist) {
                 currentListSource = 'spotify';
@@ -4329,28 +4160,13 @@
             if (resultsStatusText) resultsStatusText.classList.add('hidden');
 
             try {
-                let rawTracks, meta;
-
-                if (hasSpotifyApiCreds()) {
-                    // Via API ufficiale: playlist e brani in un colpo solo, copertine già incluse.
-                    try {
-                        const apiResult = await fetchSpotifyPlaylistViaApi(playlistId);
-                        rawTracks = apiResult.tracks;
-                        meta = { name: apiResult.name, cover: apiResult.cover };
-                    } catch (apiErr) {
-                        console.warn('API Spotify fallita, ripiego sullo scraping embed:', apiErr);
-                    }
+                if (!hasSpotifyApiCreds()) {
+                    throw new Error('Client ID/Secret Spotify non configurati.');
                 }
 
-                if (!rawTracks) {
-                    // Ripiego: pagina embed pubblica (nessuna chiave API configurata, o
-                    // l'API ufficiale ha fallito per qualche motivo).
-                    const fetched = await fetchSpotifyEmbedText(playlistId, forceRefresh);
-                    rawTracks = fetched.type === 'text'
-                        ? parseSpotifyTracksFromText(fetched.data)
-                        : parseSpotifyTracksFromHtml(fetched.data);
-                    meta = extractSpotifyPlaylistMeta(fetched);
-                }
+                const apiResult = await fetchSpotifyPlaylistViaApi(playlistId);
+                const rawTracks = apiResult.tracks;
+                const meta = { name: apiResult.name, cover: apiResult.cover };
 
                 if (rawTracks.length === 0) {
                     throw new Error('Nessun brano trovato: la playlist potrebbe essere privata, vuota o non più raggiungibile.');
@@ -4358,10 +4174,8 @@
 
                 // Per ogni brano controlliamo subito la cache locale: se lo abbiamo già
                 // risolto in passato (stesso titolo+artista), riusiamo id/copertina senza
-                // toccare la rete. Solo i brani MAI incontrati prima restano "vuoti" e
-                // verranno cercati su iTunes/YouTube come al solito (iTunes al render,
-                // YouTube solo quando l'utente li riproduce davvero). Se la copertina è
-                // già arrivata dall'API Spotify, la teniamo così com'è (niente iTunes).
+                // toccare la rete. La copertina arriva già dall'API Spotify insieme al
+                // brano; solo se manca (raro) verrà cercata di nuovo su Spotify al render.
                 appState.tracks = rawTracks.map(t => {
                     const cached = getCachedTrack(t.title, t.artist);
                     const thumbnail = t.thumbnail || cached?.thumbnail || null;
@@ -4384,7 +4198,7 @@
                 showResultsView(cleanName);
                 currentLoadedKey = 'playlist:' + url;
                 currentLoadedTitle = cleanName;
-                const playlistArtwork = meta.cover || await pickRandomPlaylistArtwork(rawTracks);
+                const playlistArtwork = meta.cover || pickRandomPlaylistArtwork(rawTracks);
                 const recentName = formatRecentPlaylistName(meta.name);
                 addRecentItem({ name: recentName, type: 'playlist', url, artwork: playlistArtwork });
                 addRecentPlaylist({ name: recentName, url, artwork: playlistArtwork });
@@ -4408,10 +4222,8 @@
         }
 
         // Copertina per un singolo brano importato da Spotify, quando l'oggetto restituito
-        // dall'API playlist non aveva album.images valorizzato (capita per alcune voci).
-        // Prima via: ricerca Spotify stessa (stessa fonte affidabile, niente proxy CORS).
-        // Solo se anche questa fallisce (o le chiavi API non sono configurate) si ripiega
-        // sull'API pubblica di iTunes tramite proxy CORS, meno affidabile.
+        // dall'API playlist non aveva album.images valorizzato (capita per alcune voci):
+        // si ricerca di nuovo il brano con l'API di ricerca di Spotify.
         async function fetchTrackArtworkFromSpotifySearch(track, index) {
             try {
                 const token = await getSpotifyAccessToken();
@@ -4431,16 +4243,7 @@
         async function fetchTrackArtwork(track, index) {
             if (track.id || track.artworkFetched) return;
             track.artworkFetched = true;
-            let artwork = null;
-            if (hasSpotifyApiCreds()) {
-                artwork = await fetchTrackArtworkFromSpotifySearch(track, index);
-            }
-            if (!artwork) {
-                const data = await itunesSearch(`${track.title} ${track.channel}`);
-                artwork = data && data.results && data.results[0] && data.results[0].artworkUrl100
-                    ? data.results[0].artworkUrl100.replace('100x100bb', '400x400bb')
-                    : null;
-            }
+            const artwork = await fetchTrackArtworkFromSpotifySearch(track, index);
             if (artwork && !track.id) {
                 track.thumbnail = artwork;
                 const img = document.getElementById(`track-img-${index}`);
@@ -4449,31 +4252,6 @@
                 // playlist (anche diversa), la copertina è già pronta senza rifare
                 // la ricerca.
                 setCachedTrack(track.title, track.channel, { thumbnail: artwork });
-            }
-        }
-
-        // Copertina per un singolo brano importato da Spotify, tramite l'API pubblica di
-        // iTunes: nessuna chiave, nessuna quota YouTube coinvolta. Se il brano viene poi
-        // risolto su YouTube (playTrack), la sua miniatura verrà sostituita da quella del video.
-        async function fetchTrackArtworkFromItunes(track, index) {
-            if (track.id || track.artworkFetched) return;
-            track.artworkFetched = true;
-            try {
-                const data = await itunesSearch(`${track.title} ${track.channel}`);
-                const artwork = data && data.results && data.results[0] && data.results[0].artworkUrl100
-                    ? data.results[0].artworkUrl100.replace('100x100bb', '400x400bb')
-                    : null;
-                if (artwork && !track.id) {
-                    track.thumbnail = artwork;
-                    const img = document.getElementById(`track-img-${index}`);
-                    if (img) img.src = artwork;
-                    // Salva in cache: la prossima volta che questo brano compare in una
-                    // playlist (anche diversa), la copertina è già pronta senza rifare
-                    // la chiamata a iTunes.
-                    setCachedTrack(track.title, track.channel, { thumbnail: artwork });
-                }
-            } catch (err) {
-                console.warn('Impossibile recuperare copertina da iTunes:', err);
             }
         }
 
@@ -4847,9 +4625,8 @@
                         displayArtwork(img, track.id);
                     }, 0);
                 } else if (!track.artworkFetched) {
-                    // Copertina per il singolo brano: prima ricerca Spotify (se configurata),
-                    // poi iTunes come ripiego. Scaglionata per non sparare decine di
-                    // richieste tutte insieme all'import.
+                    // Copertina per il singolo brano tramite ricerca Spotify, scaglionata
+                    // per non sparare decine di richieste tutte insieme all'import.
                     const delay = Math.min(index - fromIndex, 40) * 90;
                     setTimeout(() => fetchTrackArtwork(track, index), delay);
                 }
