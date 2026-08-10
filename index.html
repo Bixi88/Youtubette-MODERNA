@@ -989,9 +989,9 @@
            scuro, poco leggibile su questo tema in vetro. Qui sostituiamo con lo stesso
            trattamento "vetro chiaro" usato per gli altri pulsanti tondi della skin. */
         html.frosted .qcard .qcard-delete {
-            background: rgba(255,255,255,0.28);
-            color: #F5F7FA;
-            border: 1px solid rgba(255,255,255,0.38);
+            background: #E8ECF3;
+            color: #2B3448;
+            border: 1px solid rgba(255,255,255,0.5);
             box-shadow: 0 4px 10px rgba(0,0,0,.35);
         }
 
@@ -2761,7 +2761,14 @@
         // Persistita in localStorage: quando una playlist (Spotify o altro) viene
         // riaperta, i brani già risolti in passato vengono riconosciuti subito senza
         // richiamare YouTube/iTunes. Solo i brani MAI visti prima finiscono in rete.
-        const TRACK_CACHE_KEY = 'youtubette_track_cache';
+        // v2: prima di questa versione la ricerca automatica usava un filtro
+        // (videoDuration:'medium') diverso da quello del modal "Correggi canzone", quindi
+        // molte voci qui dentro puntano al video SBAGLIATO trovato con la vecchia ricerca.
+        // Cambiando il nome della chiave, quelle vecchie voci restano semplicemente
+        // ignorate (non vengono lette né cancellate: restano lì, inerti, in localStorage)
+        // e ogni brano viene ri-risolto una volta sola con la ricerca corretta, poi
+        // ri-salvato in cache qui sotto con l'id giusto.
+        const TRACK_CACHE_KEY = 'youtubette_track_cache_v2';
         const TRACK_CACHE_MAX = 3000; // oltre questa soglia si scartano le voci più vecchie
 
         // Stessa idea della cache-playlist: con migliaia di brani salvati, ri-parsare tutto
@@ -2898,7 +2905,14 @@
         // parte tutto dalla cache — istantaneo, zero fetch a Spotify e zero nuove ricerche
         // YouTube per i brani già risolti in precedenza. Oltre la scadenza si rifà il giro
         // normale (la playlist potrebbe essere cambiata nel frattempo).
-        const PLAYLIST_TRACKS_CACHE_KEY = 'youtubette_playlist_tracks_cache';
+        // v2 per lo stesso motivo di TRACK_CACHE_KEY qui sopra: le playlist Spotify già
+        // importate avevano i brani ascoltati salvati con `id` + `resolved:true` da qui
+        // dentro, cioè con il video SBAGLIATO trovato dalla vecchia ricerca automatica.
+        // Siccome più sotto (in playTrack) `if (!track.id)` salta del tutto la nuova
+        // ricerca quando l'id è già presente, quei brani avrebbero continuato a suonare
+        // il video sbagliato per sempre anche dopo aver corretto la ricerca. Cambiando
+        // chiave, le playlist vengono ri-scaricate/ri-risolte da zero con la logica giusta.
+        const PLAYLIST_TRACKS_CACHE_KEY = 'youtubette_playlist_tracks_cache_v2';
         const PLAYLIST_TRACKS_CACHE_MAX = 20; // oltre questa soglia si scartano le playlist meno recenti
         const PLAYLIST_TRACKS_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 giorni ("questo mese")
 
