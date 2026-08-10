@@ -699,7 +699,7 @@
         .qcard.latest .name { color:var(--accent); }
         .qcard .name { font-size:12.5px; font-weight:600; text-align:center; line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--text-main); }
         .qcard .qcard-delete {
-            position: absolute; top: -6px; right: -6px; width: 24px; height: 24px; border-radius: 50%;
+            position: absolute; top: 2px; right: 2px; width: 24px; height: 24px; border-radius: 50%;
             display: flex; align-items: center; justify-content: center; font-size: 11px;
             background: var(--accent); color: var(--bg-main); box-shadow: 0 4px 10px rgba(0,0,0,.45);
             opacity: 0; transform: scale(0.4); pointer-events: none;
@@ -3780,6 +3780,7 @@
             if (params.q) url += `&q=${encodeURIComponent(params.q)}`;
             if (params.maxResults) url += `&maxResults=${params.maxResults}`;
             if (params.videoDuration) url += `&videoDuration=${params.videoDuration}`;
+            if (params.videoCategoryId) url += `&videoCategoryId=${params.videoCategoryId}`;
             if (params.publishedAfter) url += `&publishedAfter=${encodeURIComponent(params.publishedAfter)}`;
             if (params.pageToken) url += `&pageToken=${params.pageToken}`;
             return url;
@@ -3819,6 +3820,7 @@
                 if (params.maxResults) url += `&maxResults=${params.maxResults}`;
                 if (params.pageToken) url += `&pageToken=${encodeURIComponent(params.pageToken)}`;
                 if (params.videoDuration) url += `&videoDuration=${params.videoDuration}`;
+                if (params.videoCategoryId) url += `&videoCategoryId=${params.videoCategoryId}`;
                 const res = await fetch(url);
                 const data = await res.json();
                 if (data.error) throw new Error(data.error);
@@ -4285,7 +4287,7 @@
                 // ricerca di prima, cambia solo il filtro lato YouTube: niente chiamate in
                 // più. Risolve la maggior parte dei casi di "canzone sbagliata"; il resto si
                 // sistema a mano col tasto "Correggi canzone" (pressione prolungata sulla riga).
-                const data = await youtubeSearch({ q: query, maxResults: 1, videoDuration: 'medium' });
+                const data = await youtubeSearch({ q: query, maxResults: 1, videoDuration: 'medium', videoCategoryId: '10' });
                 // Solo QUESTO è un vero problema di chiavi/API (nessuna delle 3 fonti ha risposto):
                 // mostra il badge di errore. Se invece l'API ha risposto ma semplicemente non c'è
                 // un video corrispondente a questo brano, non è un problema di chiave: niente badge,
@@ -4380,7 +4382,7 @@
             // identico motivo: query coerente, altrimenti le alternative proposte qui
             // soffrirebbero dello stesso problema (risultati sul marchio, non sulla canzone).
             const query = `${track.title} ${track.channel} song`;
-            let data = await youtubeSearch({ q: query, maxResults: 8 });
+            let data = await youtubeSearch({ q: query, maxResults: 8, videoCategoryId: '10' });
             if (!data) {
                 showVisualApiError();
                 throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
@@ -4391,7 +4393,7 @@
             // titolo, molto più permissivo.
             if (!data.items || data.items.length === 0) {
                 const fallbackQuery = `${track.title} song`;
-                const fallbackData = await youtubeSearch({ q: fallbackQuery, maxResults: 8 });
+                const fallbackData = await youtubeSearch({ q: fallbackQuery, maxResults: 8, videoCategoryId: '10' });
                 if (fallbackData && fallbackData.items && fallbackData.items.length > 0) data = fallbackData;
             }
             if (!data.items) return [];
