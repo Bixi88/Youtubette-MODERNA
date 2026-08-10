@@ -693,6 +693,7 @@
         .qcard { display:flex; flex-direction:column; align-items:center; gap:9px; cursor:pointer; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
         .qcard * { -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
         .qcard:active { transform:scale(0.96); }
+        .qcard { position:relative; }
         .qcard .circle { width:100%; aspect-ratio:1/1; border-radius:50%; background-size:calc(var(--artwork-zoom) * 100%); background-position:center; background-color:var(--bg-input); position:relative; box-shadow:0 10px 22px -8px rgba(0,0,0,.5); overflow:hidden; }
         .qcard.latest .circle { box-shadow:0 0 0 3px var(--accent), 0 10px 22px -8px rgba(0,0,0,.5); }
         .qcard.latest .name { color:var(--accent); }
@@ -703,7 +704,7 @@
             background: var(--accent); color: var(--bg-main); box-shadow: 0 4px 10px rgba(0,0,0,.45);
             opacity: 0; transform: scale(0.4); pointer-events: none;
             transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
-            z-index: 2;
+            z-index: 5;
         }
         .qcard.show-delete .qcard-delete { opacity: 1; transform: scale(1); pointer-events: auto; }
         .qcard.show-delete .circle { animation: qcardShake 0.3s ease; }
@@ -3424,11 +3425,10 @@
             grid.classList.remove('hidden');
             grid.innerHTML = items.map((it, i) => `
                 <div class="qcard${i === 0 ? ' latest' : ''}" data-index="${i}">
-                    <div class="circle" style="${it.artwork ? `background-image:url('${it.artwork.replace(/'/g, "\\'")}')` : ''}">
-                        <button class="qcard-delete" data-index="${i}" title="Rimuovi">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
-                    </div>
+                    <div class="circle" style="${it.artwork ? `background-image:url('${it.artwork.replace(/'/g, "\\'")}')` : ''}"></div>
+                    <button class="qcard-delete" data-index="${i}" title="Rimuovi">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
                     <div class="name">${escapeHtml(it.name)}</div>
                 </div>
             `).join('');
@@ -4368,19 +4368,31 @@
             if (container) container.innerHTML = `<div class="correct-song-status">${escapeHtml(message)}</div>`;
         }
 
-        // Stesse 3 fonti (chiave primaria, secondaria, worker di backup) di youtubeSearch: qui
-        // chiediamo 5 risultati invece di 1, con lo stesso filtro videoDuration:'medium' usato
-        // dalla risoluzione automatica, così le alternative proposte non includono a loro volta
-        // mix/compilation lunghissime.
+        // Stesse 3 fonti (chiave primaria, secondaria, worker di backup) di youtubeSearch. A
+        // differenza della risoluzione automatica, qui NON applichiamo più il filtro
+        // videoDuration:'medium' (4-20 minuti): essendo una scelta manuale dell'utente, quel
+        // filtro faceva più danni che altro, escludendo a priori tantissime canzoni pop/brevi
+        // (sotto i 4 minuti) e lasciando spesso "Nessuna alternativa trovata" oppure, quando
+        // qualcosa passava il filtro, solo remix/mix fuori target. Chiediamo 8 risultati invece
+        // di 5 per dare più scelta reale a chi sta correggendo manualmente.
         async function searchAlternativesForTrack(track) {
             // Stessa aggiunta di "song" vista in resolveYoutubeIdForTrack, per lo stesso
             // identico motivo: query coerente, altrimenti le alternative proposte qui
             // soffrirebbero dello stesso problema (risultati sul marchio, non sulla canzone).
             const query = `${track.title} ${track.channel} song`;
-            const data = await youtubeSearch({ q: query, maxResults: 5, videoDuration: 'medium' });
+            let data = await youtubeSearch({ q: query, maxResults: 8 });
             if (!data) {
                 showVisualApiError();
                 throw new Error('Chiave primaria, secondaria e worker di backup non disponibili');
+            }
+            // Il nome canale salvato (spesso preso da Spotify) a volte non combacia affatto
+            // col nome del canale reale su YouTube, e questo da solo può azzerare i risultati
+            // di una query altrimenti valida. Se non troviamo nulla, riproviamo con solo il
+            // titolo, molto più permissivo.
+            if (!data.items || data.items.length === 0) {
+                const fallbackQuery = `${track.title} song`;
+                const fallbackData = await youtubeSearch({ q: fallbackQuery, maxResults: 8 });
+                if (fallbackData && fallbackData.items && fallbackData.items.length > 0) data = fallbackData;
             }
             if (!data.items) return [];
             return data.items.map(item => ({
