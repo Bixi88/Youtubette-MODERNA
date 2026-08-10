@@ -4039,10 +4039,26 @@
             const html = await fetchViaCorsProxy(`https://open.spotify.com/embed/playlist/${playlistId}`);
             const doc = new DOMParser().parseFromString(html, 'text/html');
 
-            const name = doc.querySelector('meta[property="og:title"]')?.content
-                || doc.querySelector('title')?.textContent
-                || 'Playlist';
-            const cover = doc.querySelector('meta[property="og:image"]')?.content || null;
+            // La copertina della playlist ha un attributo alt del tipo "Nome Playlist cover":
+            // è la fonte più affidabile per il nome, verificata su una pagina embed reale.
+            // I meta tag (og:title, <title>) nella pagina servita dal proxy sono spesso
+            // assenti o generici (pagina pensata per essere idratata da JS, non per SEO),
+            // quindi restano solo come ripiego.
+            let name = null, cover = null;
+            const coverImg = Array.from(doc.querySelectorAll('img')).find(img => /\bcover$/i.test((img.alt || '').trim()));
+            if (coverImg) {
+                name = coverImg.alt.trim().replace(/\s*cover$/i, '').trim();
+                cover = coverImg.src || coverImg.getAttribute('src') || null;
+            }
+            if (!name) {
+                name = doc.querySelector('meta[property="og:title"]')?.content
+                    || doc.querySelector('title')?.textContent
+                    || null;
+            }
+            if (!cover) {
+                cover = doc.querySelector('meta[property="og:image"]')?.content || null;
+            }
+            name = name || 'Playlist';
 
             const rows = doc.querySelectorAll('ol li, [role="row"]');
             const tracks = [];
@@ -4079,7 +4095,7 @@
         // più il limite a 3 parole) per i "Recenti".
         function cleanSpotifyPlaylistName(name) {
             let cleaned = (name || '').trim();
-            cleaned = cleaned.split(/\s+(?:[-|–•]\s*(?:playlist\s+)?by\s+|[-|–•]\s+|by\s+)/i)[0].trim();
+            cleaned = cleaned.split(/·|\s+(?:[-|–•]\s*(?:playlist\s+)?by\s+|[-|–•]\s+|by\s+)/i)[0].trim();
             cleaned = cleaned
                 .replace(/\bspotify\b/gi, '')
                 .replace(/\s{2,}/g, ' ')
@@ -4211,7 +4227,7 @@
         // applica). Ogni chiamata usa un nome di callback univoco e un timeout, così lo
         // <script> non resta mai orfano se iTunes non risponde in tempo.
         let itunesJsonpCounter = 0;
-        function fetchItunesArtworkJSONP(title, artist, timeoutMs = 6000) {
+        function fetchItunesArtworkJSONP(title, artist, timeoutMs = 4000) {
             return new Promise((resolve) => {
                 const callbackName = `__itunesJsonp${Date.now()}_${itunesJsonpCounter++}`;
                 let script = null;
@@ -4625,13 +4641,33 @@
                         const img = document.getElementById(`track-img-${index}`);
                         displayArtwork(img, track.id);
                     }, 0);
-                } else if (!track.artworkFetched) {
-                    // Copertina per il singolo brano tramite ricerca Spotify, scaglionata
-                    // per non sparare decine di richieste tutte insieme all'import.
-                    const delay = Math.min(index - fromIndex, 40) * 90;
-                    setTimeout(() => fetchTrackArtwork(track, index), delay);
                 }
             }
+
+            // Copertine temporanee (iTunes) per tutti i brani appena aggiunti che ne sono
+            // ancora privi: una coda unica con un numero limitato di richieste in parallelo,
+            // non più una in fila all'altra scaglionata nel tempo (che su playlist lunghe,
+            // sommata a eventuali richieste lente/fallite, poteva allungarsi a decine di
+            // secondi prima che l'ultima riga ricevesse la sua copertina).
+            runArtworkQueue(appState.tracks, fromIndex);
+        }
+
+        // "N alla volta": un numero fisso di richieste iTunes gira in parallelo: appena una
+        // finisce (trovata l'artwork o no), il "worker" passa subito al brano successivo
+        // ancora privo di copertina, senza aspettare che finiscano anche le altre.
+        const ITUNES_ARTWORK_CONCURRENCY = 6;
+        function runArtworkQueue(tracks, fromIndex) {
+            let nextIndex = fromIndex;
+            async function worker() {
+                while (nextIndex < tracks.length) {
+                    const index = nextIndex++;
+                    const track = tracks[index];
+                    if (track && !track.id && !track.artworkFetched) {
+                        await fetchTrackArtwork(track, index);
+                    }
+                }
+            }
+            for (let i = 0; i < ITUNES_ARTWORK_CONCURRENCY; i++) worker();
         }
 
         // Coda realmente "in ascolto": indipendente da cosa l'utente sta sfogliando in quel
