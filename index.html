@@ -4262,89 +4262,106 @@
             }
         }
 
-        // --- ARTWORK (iTunes Search API, RIPIEGO) ---
-        // L'API di ricerca iTunes (itunes.apple.com/search) non concede CORS a chi la
-        // chiama da un browser: l'unico modo per usarla lato client è JSONP (un tag
-        // <script> con parametro "callback" — non è una fetch/XHR, quindi CORS non si
+        // --- ARTWORK (sistema identico alla vecchia versione del progetto) ---
+        // jsonpRequest: helper generico per interrogare un'API senza header CORS tramite
+        // un tag <script> con parametro "callback" (non una fetch/XHR, quindi CORS non si
         // applica). Ogni chiamata usa un nome di callback univoco e un timeout, così lo
-        // <script> non resta mai orfano se iTunes non risponde in tempo. Usata come
-        // seconda fonte, dopo Deezer (vedi sotto).
-        let itunesJsonpCounter = 0;
-        function fetchItunesArtworkJSONP(title, artist, timeoutMs = 4000) {
-            return new Promise((resolve) => {
-                const callbackName = `__itunesJsonp${Date.now()}_${itunesJsonpCounter++}`;
-                let script = null;
+        // <script> non resta mai orfano se l'API non risponde in tempo.
+        function jsonpRequest(url, timeoutMs = 8000) {
+            return new Promise((resolve, reject) => {
+                const callbackName = 'jsonp_cb_' + Math.random().toString(36).slice(2);
+                const script = document.createElement('script');
+                let settled = false;
+
                 const cleanup = () => {
                     delete window[callbackName];
-                    if (script) script.remove();
-                    clearTimeout(timer);
+                    script.remove();
                 };
-                const timer = setTimeout(() => { cleanup(); resolve(null); }, timeoutMs);
+
                 window[callbackName] = (data) => {
+                    if (settled) return;
+                    settled = true;
                     cleanup();
-                    const artwork = data?.results?.[0]?.artworkUrl100 || null;
-                    // iTunes fornisce di default una miniatura 100x100: troppo piccola per
-                    // il now-playing a schermo intero. Sostituendo questa porzione dell'URL
-                    // si ottiene la stessa immagine in versione 600x600.
-                    resolve(artwork ? artwork.replace('100x100bb', '600x600bb') : null);
+                    resolve(data);
                 };
-                const term = encodeURIComponent(`${title} ${artist}`);
-                script = document.createElement('script');
-                script.src = `https://itunes.apple.com/search?term=${term}&media=music&entity=song&limit=1&callback=${callbackName}`;
-                script.onerror = () => { cleanup(); resolve(null); };
-                document.head.appendChild(script);
+
+                script.onerror = () => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    reject(new Error('Errore caricamento script JSONP'));
+                };
+
+                setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    cleanup();
+                    reject(new Error('Timeout JSONP'));
+                }, timeoutMs);
+
+                const separator = url.includes('?') ? '&' : '?';
+                script.src = `${url}${separator}output=jsonp&callback=${callbackName}`;
+                document.body.appendChild(script);
             });
         }
 
-        // --- ARTWORK (Deezer, via JSONP, FONTE PRIMARIA) ---
-        // Presa dalla vecchia versione del progetto, dove era la prima fonte interrogata:
-        // stesso ordine qui. Stesso principio JSONP di sopra (script tag + callback),
-        // dominio diverso - Deezer non manda header CORS sulle risposte JSON normali. Non
-        // tocca in alcun modo la velocità dell'import playlist (fetchViaCorsProxy) né la
-        // concorrenza della coda artwork qui sotto.
-        let deezerJsonpCounter = 0;
-        function fetchDeezerArtworkJSONP(title, artist, timeoutMs = 6000) {
-            return new Promise((resolve) => {
-                const callbackName = `__deezerJsonp${Date.now()}_${deezerJsonpCounter++}`;
-                let script = null;
-                const cleanup = () => {
-                    delete window[callbackName];
-                    if (script) script.remove();
-                    clearTimeout(timer);
-                };
-                const timer = setTimeout(() => { cleanup(); resolve(null); }, timeoutMs);
-                window[callbackName] = (data) => {
-                    cleanup();
-                    const item = (data && data.data && data.data[0]) || null;
-                    const artwork = (item && item.album && (item.album.cover_big || item.album.cover_medium)) || null;
-                    resolve(artwork);
-                };
-                const term = encodeURIComponent(`${title} ${artist}`);
-                script = document.createElement('script');
-                script.src = `https://api.deezer.com/search/track?q=${term}&limit=1&output=jsonp&callback=${callbackName}`;
-                script.onerror = () => { cleanup(); resolve(null); };
-                document.head.appendChild(script);
-            });
+        // type: 'track' o 'album'. Restituisce l'array grezzo di risultati Deezer.
+        async function fetchDeezerResults(term, type) {
+            try {
+                const endpoint = type === 'album'
+                    ? 'https://api.deezer.com/search/album'
+                    : 'https://api.deezer.com/search/track';
+                const data = await jsonpRequest(`${endpoint}?q=${encodeURIComponent(term)}&limit=15`);
+                return (data && data.data) || [];
+            } catch (err) {
+                console.warn(`Impossibile recuperare risultati Deezer (${type}):`, err);
+                return [];
+            }
+        }
+
+        // Le tracce hanno la copertina annidata in item.album, gli album ce l'hanno diretta.
+        function extractDeezerArtwork(item, type) {
+            if (type === 'album') return item.cover_big || item.cover_medium || null;
+            return (item.album && (item.album.cover_big || item.album.cover_medium)) || null;
+        }
+
+        // Deezer come fonte primaria (gratuita, senza chiave); iTunes come ripiego
+        // (fetch normale: itunes.apple.com concede CORS sulla sua API di ricerca).
+        async function fetchArtworkForQuickSearch(term) {
+            const deezerTracks = await fetchDeezerResults(term, 'track');
+            if (deezerTracks.length > 0) {
+                const art = extractDeezerArtwork(deezerTracks[0], 'track');
+                if (art) return art;
+            }
+            try {
+                const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(term)}&limit=1&entity=musicTrack`);
+                const data = await res.json();
+                if (data.results && data.results[0] && data.results[0].artworkUrl100) {
+                    return data.results[0].artworkUrl100.replace('100x100bb', '400x400bb');
+                }
+            } catch (err) {
+                console.warn('Impossibile recuperare artwork da iTunes:', err);
+            }
+            return null;
         }
 
         // Copertina TEMPORANEA per un brano importato da Spotify (che non ha ancora un
         // video YouTube risolto, quindi nessuna miniatura definitiva): usata solo per
-        // non lasciare il tondino vuoto/grigio subito dopo l'import. Non va MAI in cache
-        // qui apposta - resta valida solo per questa sessione - perché è una copertina di
-        // ripiego (Deezer/iTunes a volte sbagliano risultato per brani ambigui/poco noti):
-        // quella vera arriva e viene salvata in cache al primo ascolto del brano, in
-        // resolveYoutubeIdForTrack più sotto, che la sostituisce.
+        // non lasciare il tondino vuoto/grigio subito dopo l'import. Viene comunque
+        // salvata in cache (a differenza della vecchia versione, che non lo faceva) ma con
+        // priorità MINORE rispetto a YouTube: setCachedTrack qui sotto scrive solo il
+        // thumbnail, senza id, così un successivo cache-hit con id (quello vero, scritto
+        // in resolveYoutubeIdForTrack al primo ascolto) sovrascrive sempre questo valore e
+        // non torna più indietro.
         async function fetchTrackArtwork(track, index) {
             if (track.id || track.artworkFetched) return;
             track.artworkFetched = true;
-            let artwork = await fetchDeezerArtworkJSONP(track.title, track.channel);
-            if (!artwork) {
-                artwork = await fetchItunesArtworkJSONP(track.title, track.channel);
-            }
+            const artwork = await fetchArtworkForQuickSearch(`${track.title} ${track.channel}`);
             if (artwork && !track.id) {
                 track.thumbnail = artwork;
                 const img = document.getElementById(`track-img-${index}`);
                 if (img) img.src = artwork;
+                setCachedTrack(track.title, track.channel, { thumbnail: artwork });
             }
         }
 
