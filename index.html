@@ -4099,7 +4099,16 @@
                 const headings = row.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]');
                 if (headings.length < 2) return; // riga senza titolo+artista: non è un brano (es. intestazione)
                 const title = headings[0].textContent.trim();
-                const artist = headings[1].textContent.trim();
+                let artist = headings[1].textContent.trim();
+                // Sulla pagina embed, i brani "espliciti" hanno il badge "E" di Spotify
+                // incollato SENZA spazio davanti al nome dell'intestazione artista (es.
+                // "Drake" -> "EDrake", "Ariana Grande" -> "EAriana Grande") - verificato
+                // recuperando una playlist reale. Lo togliamo solo quando è chiaramente
+                // il badge (una "E" maiuscola isolata seguita da un'altra maiuscola, senza
+                // spazio): rischio residuo minimo su rari nomi artista che iniziano
+                // davvero con due maiuscole di fila (es. "EXO"), accettabile visto quanti
+                // brani mainstream sono etichettati espliciti.
+                artist = artist.replace(/^E(?=[A-ZÀ-Ý])/, '');
                 if (!title || !artist) return;
                 tracks.push({ title, artist, thumbnail: null });
             });
@@ -4253,12 +4262,13 @@
             }
         }
 
-        // --- ARTWORK TEMPORANEA (iTunes Search API) ---
+        // --- ARTWORK (iTunes Search API, RIPIEGO) ---
         // L'API di ricerca iTunes (itunes.apple.com/search) non concede CORS a chi la
         // chiama da un browser: l'unico modo per usarla lato client è JSONP (un tag
         // <script> con parametro "callback" — non è una fetch/XHR, quindi CORS non si
         // applica). Ogni chiamata usa un nome di callback univoco e un timeout, così lo
-        // <script> non resta mai orfano se iTunes non risponde in tempo.
+        // <script> non resta mai orfano se iTunes non risponde in tempo. Usata come
+        // seconda fonte, dopo Deezer (vedi sotto).
         let itunesJsonpCounter = 0;
         function fetchItunesArtworkJSONP(title, artist, timeoutMs = 4000) {
             return new Promise((resolve) => {
@@ -4286,12 +4296,10 @@
             });
         }
 
-        // --- ARTWORK DI RISERVA (Deezer, via JSONP) ---
-        // Presa dalla vecchia versione del progetto: quando iTunes non trova nulla per un
-        // brano (titoli ambigui, artisti poco noti), proviamo Deezer come seconda fonte
-        // prima di arrenderci e lasciare il tondino vuoto. Stesso principio JSONP di sopra
-        // (script tag + callback), dominio diverso - Deezer non manda header CORS sulle
-        // risposte JSON normali. È più lenta di iTunes ma qui conta solo come backup: non
+        // --- ARTWORK (Deezer, via JSONP, FONTE PRIMARIA) ---
+        // Presa dalla vecchia versione del progetto, dove era la prima fonte interrogata:
+        // stesso ordine qui. Stesso principio JSONP di sopra (script tag + callback),
+        // dominio diverso - Deezer non manda header CORS sulle risposte JSON normali. Non
         // tocca in alcun modo la velocità dell'import playlist (fetchViaCorsProxy) né la
         // concorrenza della coda artwork qui sotto.
         let deezerJsonpCounter = 0;
@@ -4323,15 +4331,15 @@
         // video YouTube risolto, quindi nessuna miniatura definitiva): usata solo per
         // non lasciare il tondino vuoto/grigio subito dopo l'import. Non va MAI in cache
         // qui apposta - resta valida solo per questa sessione - perché è una copertina di
-        // ripiego (iTunes/Deezer a volte sbagliano risultato per brani ambigui/poco noti):
+        // ripiego (Deezer/iTunes a volte sbagliano risultato per brani ambigui/poco noti):
         // quella vera arriva e viene salvata in cache al primo ascolto del brano, in
         // resolveYoutubeIdForTrack più sotto, che la sostituisce.
         async function fetchTrackArtwork(track, index) {
             if (track.id || track.artworkFetched) return;
             track.artworkFetched = true;
-            let artwork = await fetchItunesArtworkJSONP(track.title, track.channel);
+            let artwork = await fetchDeezerArtworkJSONP(track.title, track.channel);
             if (!artwork) {
-                artwork = await fetchDeezerArtworkJSONP(track.title, track.channel);
+                artwork = await fetchItunesArtworkJSONP(track.title, track.channel);
             }
             if (artwork && !track.id) {
                 track.thumbnail = artwork;
