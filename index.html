@@ -4325,9 +4325,42 @@
             return (item.album && (item.album.cover_big || item.album.cover_medium)) || null;
         }
 
-        // Deezer come fonte primaria (gratuita, senza chiave); iTunes come ripiego
-        // (fetch normale: itunes.apple.com concede CORS sulla sua API di ricerca).
-        async function fetchArtworkForQuickSearch(term) {
+        // Terzo tentativo (dopo Deezer e iTunes): TheAudioDB, database comunitario con
+        // API gratuita e CORS abilitato (chiave pubblica di test "123", 30 richieste/min).
+        // Copertura minore delle prime due su brani mainstream, ma prende spesso brani
+        // che sfuggono a Deezer/iTunes (versioni particolari, cataloghi meno comuni),
+        // quindi vale la pena provarlo prima di arrendersi.
+        async function fetchTheAudioDbArtwork(title, artist) {
+            try {
+                const url = `https://www.theaudiodb.com/api/v1/json/123/searchtrack.php?s=${encodeURIComponent(artist)}&t=${encodeURIComponent(title)}`;
+                const res = await fetch(url);
+                const data = await res.json();
+                const track = data && data.track && data.track[0];
+                const art = track && (track.strTrackThumb || (track.strAlbum && track.strAlbumThumb));
+                if (art) return art;
+            } catch (err) {
+                console.warn('Impossibile recuperare artwork da TheAudioDB:', err);
+            }
+            return null;
+        }
+
+        // Estrae il PRIMO artista da una stringa "Geolier, Sfera Ebbasta, ANNA": è quello
+        // che conta davvero per il match su Deezer/iTunes/TheAudioDB. Una query con TUTTI
+        // i featuring concatenati (com'era prima) manda a vuoto la ricerca anche quando il
+        // brano esiste di sicuro in catalogo: troppi termini diluiscono la corrispondenza,
+        // o l'API interpreta la virgola come separatore e cerca "Sfera Ebbasta"/"ANNA" come
+        // se fossero il titolo. Stessa logica già usata in buildTrackSearchQuery per YouTube.
+        function primaryArtistOf(channel) {
+            return (channel || '').split(',')[0].trim() || channel;
+        }
+
+        // Catena di ripiego per l'artwork temporanea di un brano importato: Deezer come
+        // fonte primaria (gratuita, senza chiave) -> iTunes (fetch normale: itunes.apple.com
+        // concede CORS sulla sua API di ricerca) -> TheAudioDB. Se nessuna delle tre trova
+        // nulla, niente artwork temporanea (torna null): meglio nessuna icona che una
+        // copertina inventata, la Now Playing/miniplayer gestiscono già il caso "nessuna
+        // artwork" a dovere.
+        async function fetchArtworkForQuickSearch(term, title, artist) {
             const deezerTracks = await fetchDeezerResults(term, 'track');
             if (deezerTracks.length > 0) {
                 const art = extractDeezerArtwork(deezerTracks[0], 'track');
@@ -4342,6 +4375,8 @@
             } catch (err) {
                 console.warn('Impossibile recuperare artwork da iTunes:', err);
             }
+            const audioDbArt = await fetchTheAudioDbArtwork(title, artist);
+            if (audioDbArt) return audioDbArt;
             return null;
         }
 
@@ -4356,7 +4391,8 @@
         async function fetchTrackArtwork(track, index) {
             if (track.id || track.artworkFetched) return;
             track.artworkFetched = true;
-            const artwork = await fetchArtworkForQuickSearch(`${track.title} ${track.channel}`);
+            const primaryArtist = primaryArtistOf(track.channel);
+            const artwork = await fetchArtworkForQuickSearch(`${track.title} ${primaryArtist}`, track.title, primaryArtist);
             if (artwork && !track.id) {
                 track.thumbnail = artwork;
                 const img = document.getElementById(`track-img-${index}`);
