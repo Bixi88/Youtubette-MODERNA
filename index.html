@@ -4365,16 +4365,21 @@
             }
         }
 
+        function buildTrackSearchQuery(track) {
+            const primaryArtist = (track.channel || '').split(',')[0].trim() || track.channel;
+            return `${track.title} ${primaryArtist} song`;
+        }
+
         // Risolve UN SOLO brano Spotify sul video YouTube corrispondente, e solo quando
         // l'utente lo tocca davvero per riprodurlo: così una playlist da 100 brani costa
         // al massimo 1 chiamata di ricerca per ogni brano effettivamente ascoltato, non 100
-        // chiamate subito all'import.
+        // chiamate subito all'import. "song" in coda alla query: senza questa parola, un
+        // titolo/artista che coincide (anche solo parzialmente) con un marchio noto - es.
+        // "Flower Chanel." come artista - fa sì che YouTube privilegi contenuti su quel
+        // marchio (sfilate, pubblicità) invece della canzone vera. Aggiungerla è la
+        // differenza tra i due casi.
         async function resolveYoutubeIdForTrack(track, index, updateRowUI = true) {
-            // "song" in coda alla query: senza questa parola, un titolo/artista che coincide
-            // (anche solo parzialmente) con un marchio noto - es. "Flower Chanel." come artista
-            // - fa sì che YouTube privilegi contenuti su quel marchio (sfilate, pubblicità)
-            // invece della canzone vera. Aggiungerla è la differenza tra i due casi.
-            const query = `${track.title} ${track.channel} song`;
+            const query = buildTrackSearchQuery(track);
 
             // Applica un id YouTube (video già trovato, in cache o via nuova ricerca) al
             // brano e aggiorna l'interfaccia: fattorizzato perché lo stesso identico
@@ -4537,10 +4542,12 @@
         // qualcosa passava il filtro, solo remix/mix fuori target. Chiediamo 8 risultati invece
         // di 5 per dare più scelta reale a chi sta correggendo manualmente.
         async function searchAlternativesForTrack(track) {
-            // Stessa aggiunta di "song" vista in resolveYoutubeIdForTrack, per lo stesso
-            // identico motivo: query coerente, altrimenti le alternative proposte qui
-            // soffrirebbero dello stesso problema (risultati sul marchio, non sulla canzone).
-            const query = `${track.title} ${track.channel} song`;
+            // Stessa query (solo primo artista, "song" in coda) di resolveYoutubeIdForTrack,
+            // per lo stesso identico motivo: altrimenti le alternative proposte qui
+            // soffrirebbero dello stesso problema (query diluita da più artisti, risultati
+            // sul marchio invece che sulla canzone, o peggio - titoli corti/numerici come
+            // "6/10" che senza un artista chiaro agganciano contenuti totalmente estranei).
+            const query = buildTrackSearchQuery(track);
             let data = await youtubeSearch({ q: query, maxResults: 8 });
             if (!data) {
                 showVisualApiError();
