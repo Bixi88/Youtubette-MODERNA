@@ -4841,6 +4841,49 @@
         // nextTrack/prevTrack la passano esplicitamente come nowPlayingTracks, perché quella
         // potrebbe non essere più la lista sullo schermo (l'utente nel frattempo può essere
         // passato a sfogliare un'altra playlist).
+        // Porta la riga del brano in ascolto in vista nella lista, ma SOLO se è davvero
+        // fuori dallo schermo (sopra il bordo superiore, oppure sotto — anche "nascosta"
+        // dietro il mini player fluttuante in basso, che copre visivamente l'ultimo pezzo
+        // della lista pur non facendola scrollare). In quel caso scorre fino a posizionare
+        // la riga come SECONDA dall'alto (un po' di contesto sopra, ben visibile), invece
+        // di incollarla al bordo come farebbe un semplice scrollIntoView({block:'nearest'}).
+        // Se la riga è già visibile, non tocca lo scroll: niente salti inutili ad ogni
+        // cambio brano.
+        function scrollActiveTrackRowIntoView(row) {
+            const container = document.getElementById('resultsView');
+            if (!container || !row) return;
+
+            const containerRect = container.getBoundingClientRect();
+            const rowRect = row.getBoundingClientRect();
+
+            // Il mini player è "fixed" e galleggia sopra il fondo della lista: la porzione
+            // di lista sotto di lui è tecnicamente nel DOM ma visivamente coperta. La
+            // trattiamo come non-visibile ai fini di questo controllo.
+            const miniPlayerEl = document.getElementById('miniPlayer');
+            const coveredBottom = (miniPlayerEl && miniPlayerEl.classList.contains('visible'))
+                ? miniPlayerEl.getBoundingClientRect().height + 24
+                : 0;
+
+            const visibleTop = containerRect.top;
+            const visibleBottom = containerRect.bottom - coveredBottom;
+
+            const isHiddenAbove = rowRect.top < visibleTop;
+            const isHiddenBelow = rowRect.bottom > visibleBottom;
+            if (!isHiddenAbove && !isHiddenBelow) return; // già ben visibile, non tocchiamo nulla
+
+            // Altezza di "un giro" di riga (riga + spaziatura verso la precedente), per
+            // sapere quanto spazio lasciare sopra per far diventare questa la seconda
+            // riga dall'alto. Se è la prima riga della lista, niente sorella sopra: si
+            // scrolla semplicemente in cima.
+            const prevRow = row.previousElementSibling;
+            const rowStep = prevRow ? (rowRect.top - prevRow.getBoundingClientRect().top) : rowRect.height;
+
+            const rowTopInScroll = rowRect.top - containerRect.top + container.scrollTop;
+            const targetScrollTop = Math.max(0, rowTopInScroll - rowStep);
+
+            container.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+        }
+
         async function loadTrack(index, sourceTracks = appState.tracks) {
             if (index < 0 || index >= sourceTracks.length) return;
 
@@ -4953,7 +4996,7 @@
                     // playlist, il brano attivo è comunque già evidenziato correttamente.
                     const viewsSlider = document.getElementById('viewsSlider');
                     if (viewsSlider && viewsSlider.classList.contains('showing-results')) {
-                        newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        scrollActiveTrackRowIntoView(newRow);
                     }
                 }
                 checkAndApplyMarquee();
