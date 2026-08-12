@@ -1157,10 +1157,17 @@
            in pausa mantenendo l'angolo raggiunto (.vinyl-paused mette l'animazione in
            pausa invece di rimuoverla, così riparte da dove si era interrotta invece
            che da zero). Il giro riguarda solo l'<img>, non #sheetArtworkFrame: l'ombra
-           e il bordo del cerchio restano fermi, non "girano" in modo innaturale. */
+           e il bordo del cerchio restano fermi, non "girano" in modo innaturale.
+           IMPORTANTE: i keyframe includono anche scale(var(--artwork-zoom)), lo stesso
+           zoom-crop applicato altrove a #sheetArtworkImg (vedi sopra, ~riga 317) per
+           nascondere i bordi neri "cuciti" dentro alcune copertine Spotify a bassa
+           risoluzione. Se qui si mettesse solo rotate(...), l'animation CSS
+           SOSTITUIREBBE del tutto il transform statico (scale) invece di sommarcisi:
+           durante la rotazione lo zoom sparirebbe e quei bordi neri ricomparirebbero
+           a scatti, visibili come "spicchi" neri che ruotano insieme all'immagine. */
         @keyframes vinylSpin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            from { transform: scale(var(--artwork-zoom)) rotate(0deg); }
+            to { transform: scale(var(--artwork-zoom)) rotate(360deg); }
         }
         #sheetArtworkImg.vinyl-rotate {
             animation: vinylSpin 20s linear infinite;
