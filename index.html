@@ -314,7 +314,7 @@
            ingrandita e i bordi finiscono fuori dal cerchio/contenitore, che ha
            overflow:hidden), così i bordi neri spariscono anche sulle copertine che
            li hanno. Valore regolabile da qui: più alto = più zoom/crop. */
-        :root { --artwork-zoom: 1.37; --miniplayer-artwork-zoom: 1.18; }
+        :root { --artwork-zoom: 1.37; --miniplayer-artwork-zoom: 1.37; }
         #sheetArtworkImg,
         .track-thumb-img {
             transform: scale(var(--artwork-zoom));
@@ -720,7 +720,7 @@
            (--text-muted) invece del bianco/lavanda delle altre skin. */
         html:not(.walkman):not(.frosted) .qcard .circle,
         html:not(.walkman):not(.frosted) .settings-playlist-thumb,
-        html:not(.walkman):not(.frosted) #miniPlayerImg {
+        html:not(.walkman):not(.frosted) #miniPlayerImgFrame {
             border: 2.5px solid rgba(139, 135, 148, 0.55);
         }
         html:not(.walkman):not(.frosted) #sheetArtworkFrame {
@@ -760,7 +760,7 @@
            risultati di ricerca, playlist recenti nel menu impostazioni, miniplayer e now playing. */
         html.walkman .qcard .circle,
         html.walkman .settings-playlist-thumb,
-        html.walkman #miniPlayerImg {
+        html.walkman #miniPlayerImgFrame {
             border-radius: 50% !important;
             box-shadow: none;
             border: 2.5px solid rgba(255,255,255,0.55);
@@ -953,7 +953,7 @@
            si perdeva contro lo sfondo scuro). */
         html.frosted .qcard .circle,
         html.frosted .settings-playlist-thumb,
-        html.frosted #miniPlayerImg {
+        html.frosted #miniPlayerImgFrame {
             border-radius: 50% !important;
             border: 2.5px solid rgba(255,255,255,0.55);
         }
